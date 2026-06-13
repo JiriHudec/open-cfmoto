@@ -18,7 +18,14 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Scan QR" />
+            android:text="Scan (UI)" />
+
+        <Button
+            android:id="@+id/btn_scan_mirror"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Scan (Mirror)" />
 
         <Button
             android:id="@+id/btn_stop"

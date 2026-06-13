@@ -79,11 +79,35 @@ class VideoPipeline(
             codec = c
             log("[VIDEO] encoder started ${width}x${height} h264 30fps")
 
-            main.post { setupDisplayAndPresentation() }
+            val projection = ProjectionHolder.projection
+            if (projection != null) {
+                log("[VIDEO] FULL-SCREEN mirror mode (MediaProjection)")
+                setupProjectionDisplay(projection)
+            } else {
+                log("[VIDEO] own-content mode (Presentation)")
+                main.post { setupDisplayAndPresentation() }
+            }
             drainThread = thread(name = "video-drain", isDaemon = true) { drainLoop() }
         } catch (e: Exception) {
             log("[VIDEO] start failed: $e")
             stop()
+        }
+    }
+
+    /** Full-screen mirror: capture the real device display into the encoder surface. */
+    private fun setupProjectionDisplay(projection: android.media.projection.MediaProjection) {
+        try {
+            // Required on API 34+: register a callback before creating the virtual display.
+            projection.registerCallback(object : android.media.projection.MediaProjection.Callback() {
+                override fun onStop() { log("[VIDEO] MediaProjection stopped") }
+            }, main)
+            val flags = android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
+            virtualDisplay = projection.createVirtualDisplay(
+                "OpenCfMotoMirror", width, height, 160, flags, inputSurface, null, main,
+            )
+            log("[VIDEO] mirroring device screen → ${width}x${height} (letterboxed to fit)")
+        } catch (e: Exception) {
+            log("[VIDEO] projection display failed: $e")
         }
     }
 
@@ -103,7 +127,7 @@ class VideoPipeline(
                 setBackgroundColor(Color.parseColor("#0D47A1"))
             }
             val title = TextView(pres.context).apply {
-                text = "Hello from OpenCfMoto"
+                text = "Hacked by Coletz :P"
                 setTextColor(Color.WHITE)
                 textSize = 28f
                 gravity = Gravity.CENTER

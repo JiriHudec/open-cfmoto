@@ -1,8 +1,11 @@
 package dev.coletz.opencfmoto
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
@@ -53,6 +56,44 @@ class MainActivity : AppCompatActivity() {
         joinAndStart(qr)
     }
 
+    private val projectionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK || result.data == null) {
+            log("screen-capture consent declined")
+            return@registerForActivityResult
+        }
+        // FGS of type mediaProjection must be RUNNING before getMediaProjection() on API 34+.
+        // startForegroundService is async, so poll the service's foreground flag (~every 100ms)
+        // instead of guessing a fixed delay.
+        ProjectionService.start(this)
+        val code = result.resultCode
+        val data = result.data!!
+        val maxTries = 50  // 50 * 100ms = 5s ceiling
+        val poll = object : Runnable {
+            var tries = 0
+            override fun run() {
+                if (ProjectionService.isForeground) {
+                    try {
+                        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                        ProjectionHolder.projection = mpm.getMediaProjection(code, data)
+                        log("screen-capture armed (FGS up after ${tries * 100}ms) — now scan the QR")
+                        scanLauncher.launch(Intent(this@MainActivity, QrScanActivity::class.java))
+                    } catch (e: Exception) {
+                        log("getMediaProjection failed: $e")
+                        ProjectionService.stop(this@MainActivity)
+                    }
+                } else if (tries++ < maxTries) {
+                    logView.postDelayed(this, 100)
+                } else {
+                    log("foreground service did not start within 5s — aborting mirror")
+                    ProjectionService.stop(this@MainActivity)
+                }
+            }
+        }
+        logView.post(poll)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -69,14 +110,36 @@ class MainActivity : AppCompatActivity() {
 
         prober = EasyConnProber(applicationContext, ::log)
 
+        // Android 13+: request notification permission up front so the mediaProjection
+        // foreground-service notification can be posted (some setups gate the FGS on it).
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 3,
+            )
+        }
+
         findViewById<Button>(R.id.btn_scan_connect).setOnClickListener {
+            // Own-content mode (Presentation). Clear any prior projection.
+            ProjectionHolder.projection = null
             ensureLocationPermission()
             scanLauncher.launch(Intent(this, QrScanActivity::class.java))
+        }
+        findViewById<Button>(R.id.btn_scan_mirror).setOnClickListener {
+            // Full-screen mirror mode: get capture consent first, then scan.
+            ensureLocationPermission()
+            val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            projectionLauncher.launch(mpm.createScreenCaptureIntent())
         }
         findViewById<Button>(R.id.btn_stop).setOnClickListener {
             prober.stop()
             bleWakeUp?.stop()
             bleWakeUp = null
+            ProjectionHolder.projection?.let { try { it.stop() } catch (_: Exception) {} }
+            ProjectionHolder.projection = null
+            ProjectionService.stop(this)
             BikeWifi.leave(this, ::log)
         }
         findViewById<Button>(R.id.btn_share_log).setOnClickListener { shareLog() }
@@ -92,6 +155,9 @@ class MainActivity : AppCompatActivity() {
         prober.stop()
         bleWakeUp?.stop()
         bleWakeUp = null
+        ProjectionHolder.projection?.let { try { it.stop() } catch (_: Exception) {} }
+        ProjectionHolder.projection = null
+        ProjectionService.stop(this)
         BikeWifi.leave(this, ::log)
         super.onDestroy()
     }
