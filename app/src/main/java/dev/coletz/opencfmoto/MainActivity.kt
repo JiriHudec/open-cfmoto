@@ -55,11 +55,11 @@ class MainActivity : AppCompatActivity() {
             "QR parsed: ssid=${qr.ssid} mac=${qr.mac} action=${qr.action} " +
                 "(ap=${qr.supportsAp}, p2p=${qr.supportsP2p}) modelId=${qr.modelId} sn=${qr.sn}"
         )
-        // Pick the bike profile from the QR modelId up front — it drives the Android Auto
+        // Pick the bike profile from the QR code data up front — it drives the Android Auto
         // resolution/orientation, which must be set before AA starts. CLIENT_INFO refines it later.
-        BikeProfileHolder.active = BikeProfiles.selectByModelId(qr.modelId)
+        BikeProfileHolder.active = BikeProfiles.selectByQr(qr)
         val spec = BikeProfileHolder.active.aaVideo
-        log("→ bike profile (QR modelId=${qr.modelId}): ${BikeProfileHolder.active.name} " +
+        log("→ bike profile (QR ssid=${qr.ssid} modelId=${qr.modelId}): ${BikeProfileHolder.active.name} " +
             "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi")
 
         if (pendingAaStart) {
@@ -176,6 +176,18 @@ class MainActivity : AppCompatActivity() {
                 pendingAaStart = false
             }
         }
+
+        findViewById<Button>(R.id.btn_mirror_start).setOnClickListener {
+            log("→ Mirror Mode: requesting screen-capture consent…")
+            pendingAaStart = false
+            ensureLocationPermission()
+            try {
+                val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                projectionLauncher.launch(mpm.createScreenCaptureIntent())
+            } catch (e: Exception) {
+                log("mirror start failed ($e)")
+            }
+        }
         // Stop everything: Android Auto receiver, bike PXC, projection, and leave the bike Wi-Fi.
         findViewById<Button>(R.id.btn_aa_stop).setOnClickListener {
             log("→ stopping everything (Android Auto + bike)")
@@ -191,6 +203,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_share_log).setOnClickListener { shareLog() }
+
+        findViewById<Button>(R.id.btn_aa_settings).setOnClickListener {
+            log("→ opening Android Auto settings…")
+            try {
+                val intent = Intent("android.settings.ANDROID_AUTO_SETTINGS").apply {
+                    setPackage("com.google.android.projection.gearhead")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                try {
+                    val intent = Intent(Intent.ACTION_MAIN).apply {
+                        setClassName(
+                            "com.google.android.projection.gearhead",
+                            "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity"
+                        )
+                    }
+                    startActivity(intent)
+                } catch (e2: Exception) {
+                    log("failed to open Android Auto settings ($e2)")
+                }
+            }
+        }
 
         findViewById<Button>(R.id.btn_clear).setOnClickListener {
             LogBus.clear()

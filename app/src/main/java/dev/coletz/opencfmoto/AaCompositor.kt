@@ -85,10 +85,12 @@ class AaCompositor(private val log: (String) -> Unit) {
             try {
                 initEgl()
                 initGl()
+                val spec = BikeProfileHolder.active.aaVideo
                 surfaceTexture = SurfaceTexture(textureId)
+                surfaceTexture.setDefaultBufferSize(spec.width, spec.height)
                 surfaceTexture.setOnFrameAvailableListener({ handler.post { onFrame() } }, handler)
                 inputSurface = Surface(surfaceTexture)
-                log("[COMPOSITOR] ready — AA decoder input surface up (no output canvas yet)")
+                log("[COMPOSITOR] ready (buffer size ${spec.width}x${spec.height}) — AA decoder input surface up (no output canvas yet)")
             } catch (e: Exception) {
                 log("[COMPOSITOR] init failed: $e")
             } finally {

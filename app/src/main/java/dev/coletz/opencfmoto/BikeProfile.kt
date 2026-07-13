@@ -16,9 +16,9 @@ import java.io.OutputStream
  * the media plane reaches it via `handshake.profile`. The bike opens the media ports only AFTER
  * the control handshake, so the profile is always chosen before the media plane needs it.
  */
-/** A video resolution/orientation Android Auto can be asked to project (maps to an AAP enum). */
 enum class AaResolution(val w: Int, val h: Int) {
     LANDSCAPE_800x480(800, 480),
+    LANDSCAPE_1280x720(1280, 720),
     PORTRAIT_720x1280(720, 1280),
     PORTRAIT_1080x1920(1080, 1920),
 }
@@ -65,8 +65,11 @@ interface BikeProfile {
     ): Boolean
 
     // ---- media-plane hooks (behavior-preserving defaults; only rounding is wired this pass) ----
-    /** Round a requested capture dimension to what the encoder/bike accept. Default: down to /16. */
-    fun roundCaptureDimension(px: Int): Int = px and 0xFFF0
+    /** Round and fit requested capture dimensions. Returns Pair(width, height) normalized for this profile. */
+    fun roundCaptureDimensions(w: Int, h: Int): Pair<Int, Int> = (w and 0xFFF0) to (h and 0xFFF0)
+
+    /** Whether to force the H.264 encoder to Baseline Profile @ Level 3.1. */
+    val forceBaseline: Boolean get() = true
 
     /** Media-plane GET_VERSION reply (version, subVersion). */
     fun versionReply(): Pair<Int, Int> = 3 to 1
@@ -75,7 +78,7 @@ interface BikeProfile {
 /** Registry + selection. Never returns null — falls back to the legacy (BIKE A) profile. */
 object BikeProfiles {
     val legacy: BikeProfile = LegacyCfdl16Profile
-    private val all: List<BikeProfile> = listOf(Cfdl26Profile, LegacyCfdl16Profile)
+    private val all: List<BikeProfile> = listOf(Cfdl26PortraitProfile, Cfdl26LandscapeProfile, LegacyCfdl16Profile)
 
     /** Authoritative selection from CLIENT_INFO (during the PXC handshake). */
     fun select(info: JSONObject, log: (String) -> Unit): BikeProfile {
@@ -84,13 +87,30 @@ object BikeProfiles {
         return scored.filter { it.second > 0 }.maxByOrNull { it.second }?.first ?: legacy
     }
 
-    /** Early selection from the QR `modelId`, before we connect. Falls back to legacy. */
+    /** Early selection from the QR code data, before we connect. Falls back to legacy. */
+    fun selectByQr(qr: QrData?): BikeProfile {
+        if (qr == null) return legacy
+        val matches = all.filter { it.matchesModelId(qr.modelId ?: "") }
+        if (matches.isEmpty()) return legacy
+        if (matches.size == 1) return matches[0]
+
+        // If there are multiple matches (both Portrait and Landscape match modelId 37426):
+        // Portrait uses Wi-Fi Direct (supportsP2p = true, or ssid starts with DIRECT-)
+        val isP2p = qr.supportsP2p || qr.ssid.startsWith("DIRECT-")
+        return if (isP2p) {
+            Cfdl26PortraitProfile
+        } else {
+            Cfdl26LandscapeProfile
+        }
+    }
+
+    /** Legacy helper for backward compatibility / tests. */
     fun selectByModelId(modelId: String?): BikeProfile =
         modelId?.let { id -> all.firstOrNull { it.matchesModelId(id) } } ?: legacy
 }
 
 /**
- * Process-wide active bike profile. Set early from the QR modelId ([BikeProfiles.selectByModelId])
+ * Process-wide active bike profile. Set early from the QR code data ([BikeProfiles.selectByQr])
  * so the Android Auto stack ([ServiceDiscoveryResponse]) can request the right resolution before AA
  * starts, then confirmed authoritatively from CLIENT_INFO in [PxcHandshake]. Read across the
  * activity + the Android Auto foreground service, so it lives here as a process global (like
@@ -152,14 +172,9 @@ object LegacyCfdl16Profile : BikeProfile {
 /**
  * BIKE B — the CFDL26 / MotoPlay head unit on the 1000 MT-X (sdkVersion 1.1.4,
  * package com.cfmoto.cfdashmotoplay, enableSockServerAuth=true, WiFi-Direct P2P).
- *
- * Status: the control handshake gets through CLIENT_INFO + channel selects, then the bike sends an
- * unhandled [PxcFrame.CMD_LOG_REPORT] (0x10780) and — if left unanswered — closes after ~9s without
- * ever opening the media ports. This profile's first experimental divergence is to ack that frame.
- * Root cause is unconfirmed; see the auth TODO in [handleUnknownControl].
  */
-object Cfdl26Profile : BikeProfile {
-    override val name = "CFDL26 / MotoPlay (BIKE B, 1000 MT-X)"
+object Cfdl26PortraitProfile : BikeProfile {
+    override val name = "CFDL26 / MotoPlay Portrait (1000 MT-X)"
     override val requiresSockServerAuth = true
     override val supportsScreenTouch = true
     override val advertisedSupportFunction = 128
@@ -177,7 +192,7 @@ object Cfdl26Profile : BikeProfile {
         val sdk = info.optString("sdkVersion")
         if (sdk.isNotEmpty() && !sdk.startsWith("0.")) s += 2   // 1.1.4 etc., not the 0.9.x legacy unit
         if (info.optBoolean("enableSockServerAuth", false)) s += 2
-        if (info.optString("package_name") == "com.cfmoto.cfdashmotoplay") s += 2
+        if (info.optString("package_name") == "com.cfmoto.cfdashmotoplay") s += 3
         if (info.optInt("supportFunction", 0) == 128) s += 1
         return s
     }
@@ -194,11 +209,7 @@ object Cfdl26Profile : BikeProfile {
         // did — 0x10780 (log), 0x103a0 (OTA FTP creds), 0x10020 (media-feature flags), and possibly
         // more — and will NOT connect to the media ports until each is acked. The whole PXC protocol
         // acks with reply = cmd+1 (empty), so ack every otherwise-unhandled control frame that way.
-        // Only genuinely-unknown frames reach here (channel selects, CLIENT_INFO, QUERY_SPEED,
-        // CHECK_SN, heartbeat are all handled upstream in PxcHandshake.handle), so this is safe.
         val body = if (frame.payload.isEmpty()) "" else String(frame.payload, Charsets.UTF_8)
-        // Also hex-dump the payload: touch/screen frames (e.g. CMD_SCREEN_TOUCH 0x30040) carry BINARY
-        // coordinates that garble as UTF-8. This is how we'll reverse the touch layout from a bike test.
         val hex = if (frame.payload.isEmpty()) "" else
             " hex=" + BleProtocol.bytesToHex(frame.payload.copyOf(minOf(48, frame.payload.size)))
         val tag2 = if (frame.cmd == PxcFrame.CMD_SCREEN_TOUCH) " *** SCREEN_TOUCH ***" else ""
@@ -207,8 +218,45 @@ object Cfdl26Profile : BikeProfile {
             "$body$hex → ack 0x${ack.toUInt().toString(16)} (empty)")
         PxcFrame(ack, ByteArray(0)).write(out)
         return true
-        // NOTE if this still stalls: enableSockServerAuth=true may need a real auth exchange (the
-        // 0x2001x REMOTE_AUTH_RESULT / 0x3001x AUTH_HUID family) rather than a bare ack — the log
-        // above will show which frame the bike repeats or waits on.
+    }
+}
+
+/**
+ * BIKE C — the CFDL26 / MotoPlay head unit on the 800MT (sdkVersion 1.1.2,
+ * package com.cfmoto.easyconnect, enableSockServerAuth=true, AP mode).
+ */
+object Cfdl26LandscapeProfile : BikeProfile {
+    override val name = "CFDL26 / MotoPlay Landscape (800MT)"
+    override val requiresSockServerAuth = true
+    override val supportsScreenTouch = true
+    override val advertisedSupportFunction = 128
+
+    /** The 800MT has a landscape screen. Ask AA for landscape 1280x720; the compositor letterboxes it. */
+    override val aaVideo = AaVideoSpec(AaResolution.LANDSCAPE_1280x720, dpi = 160)
+
+    override fun matchesModelId(modelId: String): Boolean = modelId.trim() == "37426"
+
+    override fun score(info: JSONObject): Int {
+        var s = 0
+        if (info.optString("version_name").startsWith("CFDL26")) s += 4
+        val sdk = info.optString("sdkVersion")
+        if (sdk.isNotEmpty() && !sdk.startsWith("0.")) s += 2
+        if (info.optBoolean("enableSockServerAuth", false)) s += 2
+        if (info.optString("package_name") == "com.cfmoto.easyconnect") s += 3
+        if (info.optInt("supportFunction", 0) == 128) s += 1
+        return s
+    }
+
+    override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
+        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction).apply {
+            put("supportScreenTouch", true)
+        }
+
+    override val forceBaseline = false
+
+    override fun handleUnknownControl(
+        tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
+    ): Boolean {
+        return Cfdl26PortraitProfile.handleUnknownControl(tag, frame, out, log)
     }
 }

@@ -55,6 +55,8 @@ class EasyConnProber(
 
     fun start(network: Network?) {
         if (running) { log("already running"); return }
+        probed = false
+        framesSent = 0
         dumpEnvironment(network)
 
         val myIp = pickBikeInterfaceIp(network)
@@ -87,6 +89,7 @@ class EasyConnProber(
 
     fun stop() {
         running = false
+        probed = false
         // Only stop the pipeline if we created it; the shared Android Auto pipeline is owned
         // by AndroidAutoService and must outlive a bike disconnect.
         if (ownsVideo) video?.stop()
@@ -231,8 +234,9 @@ class EasyConnProber(
                 val wantEncoder = if (body.size >= 12) cfg.getInt(8) else 2
                 val supportExtend = if (body.size >= 30) body[29] else 0
                 log("[$tag] REQ_CONFIG_CAPTURE w=$w h=$h fps=$fps wantEncoder=$wantEncoder ext=$supportExtend len=${body.size}")
-                negW = handshake.profile.roundCaptureDimension(w)
-                negH = handshake.profile.roundCaptureDimension(h)
+                val (rw, rh) = handshake.profile.roundCaptureDimensions(w, h)
+                negW = rw
+                negH = rh
                 // If Android Auto is the source (shared pipeline), size its encoder + letterbox
                 // compositor to this bike canvas now — before the bike starts pulling frames (112/114).
                 AaVideoBridge.pipeline?.configureBikeCanvas(negW, negH)

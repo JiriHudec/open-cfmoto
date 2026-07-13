@@ -112,16 +112,21 @@ class VideoPipeline(
                 setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L) // 100ms → ≥10fps floor
             }
             val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            // Prefer Baseline (embedded HU decoders often require it); fall back if the encoder rejects it.
+            val forceBaseline = BikeProfileHolder.active.forceBaseline
             try {
-                val fmt = baseFormat().apply {
-                    setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
-                    setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel31)
+                if (forceBaseline) {
+                    val fmt = baseFormat().apply {
+                        setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                        setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel31)
+                    }
+                    c.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    log("[VIDEO] configured Baseline@3.1")
+                } else {
+                    c.configure(baseFormat(), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    log("[VIDEO] configured default profile (Main/High)")
                 }
-                c.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                log("[VIDEO] configured Baseline@3.1")
             } catch (e: Exception) {
-                log("[VIDEO] baseline configure failed ($e) — retrying default profile")
+                log("[VIDEO] encoder configure failed ($e) — retrying default profile")
                 c.reset()
                 c.configure(baseFormat(), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             }

@@ -34,6 +34,9 @@ internal class AapControlMedia(private val aapTransport: AapTransport) : AapCont
                     AaLog.i("Video Focus NATIVE received. User likely clicked Exit. Stopping transport.")
                     aapTransport.wasUserExit = true
                     aapTransport.stop()
+                } else if (focusRequest.mode == Media.VideoFocusMode.VIDEO_FOCUS_PROJECTED) {
+                    AaLog.i("Video Focus PROJECTED received. Replying with VideoFocusEvent GAIN.")
+                    aapTransport.send(VideoFocusEvent(gain = true, unsolicited = false))
                 }
                 return 0
             }
