@@ -3,6 +3,8 @@ This app tries to provide support for Android Auto on CFMoto bikes with MotoPlay
 Everything that has been done is a hack, it should not be considered stable or production ready (and probably never will). 
 **This is just a PoC!**
 
+👉 **New here? Read the [User Guide](USER-GUIDE.md)** for install and step-by-step setup.
+
 Having only a CFMoto 675 SR-R I cannot grant it will work on other bikes, but probably it will have problems on that same model too.
 
 This app uses Android Auto self-mode implemented by https://github.com/andreknieriem/headunit-revived/ and relies a lot on its code.
