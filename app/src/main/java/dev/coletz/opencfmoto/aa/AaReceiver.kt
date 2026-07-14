@@ -71,6 +71,7 @@ class AaReceiver(
 
     fun stop() {
         running = false
+        AaVideoBridge.touchSink = null
         try { transport?.quit() } catch (_: Exception) {}
         transport = null
         try { connection?.disconnect() } catch (_: Exception) {}
@@ -109,12 +110,29 @@ class AaReceiver(
         val t = AapTransport(videoDecoder, context)
         t.onQuit = { clean ->
             log("[AA] transport quit (clean=$clean, userExit=${t.wasUserExit})")
+            AaVideoBridge.touchSink = null
             transport = null
             try { conn.disconnect() } catch (_: Exception) {}
             connection = null
             // Server keeps listening — AA (or the user) can reconnect.
         }
         transport = t
+
+        // Bike touchscreen → Android Auto: EasyConnProber decodes dash touches (PXC cmdType 32) and
+        // calls this sink with raw bike-canvas coords + a normalised action. Letterbox-map into AA
+        // video space and forward over the AAP INPUT channel. Dropped if the point is in a black bar.
+        val input = AaInput(t, log)
+        var loggedTouchMap = false
+        AaVideoBridge.touchSink = { action, cx, cy ->
+            val mapped = AaVideoBridge.pipeline?.mapBikeTouchToSource(cx, cy)
+            if (mapped != null) {
+                if (!loggedTouchMap || action != AaInput.ACTION_MOVE) {
+                    log("[AA] touch action=$action bike=($cx,$cy) → AA=(${mapped.first},${mapped.second})")
+                    loggedTouchMap = true
+                }
+                input.sendTouch(action, mapped.first, mapped.second)
+            }
+        }
 
         log("[AA] starting AAP handshake (version + SSL)…")
         if (!t.startHandshake(conn)) {

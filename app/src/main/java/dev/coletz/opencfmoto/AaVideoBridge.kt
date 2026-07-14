@@ -15,4 +15,13 @@ object AaVideoBridge {
      * doesn't depend on the user remembering to scan after starting the receiver.
      */
     @Volatile var onSteadyVideo: (() -> Unit)? = null
+
+    /**
+     * Bike-touchscreen → Android Auto input bridge. [EasyConnProber] decodes the dash's touch frames
+     * (PXC media cmdType 32) and calls this with the raw bike-canvas coordinates and a normalised
+     * action (0=DOWN, 1=UP, 2=MOVE). The live AA session ([AaReceiver]) installs a sink that
+     * letterbox-maps the point into AA's video space and sends it over the AAP INPUT channel. Null
+     * when no AA session is active (touches are then dropped).
+     */
+    @Volatile var touchSink: ((action: Int, canvasX: Int, canvasY: Int) -> Unit)? = null
 }

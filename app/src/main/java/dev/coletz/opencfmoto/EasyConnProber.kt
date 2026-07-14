@@ -52,6 +52,7 @@ class EasyConnProber(
     @Volatile private var negW = 800
     @Volatile private var negH = 384
     @Volatile private var framesSent = 0
+    @Volatile private var touchMoves = 0
 
     fun start(network: Network?) {
         if (running) { log("already running"); return }
@@ -300,10 +301,42 @@ class EasyConnProber(
                         log("[$tag] sent frame #$framesSent (${frame.size}b)")
                 }
             }
+            32 -> handleTouch(tag, body)
             else -> {
                 val preview = BleProtocol.bytesToHex(body.copyOf(minOf(32, body.size)))
                 log("[$tag] media cmdType=$cmdType len=${body.size} $preview")
             }
+        }
+    }
+
+    /**
+     * Dash touchscreen event (PXC media cmdType 32, 18-byte body, little-endian):
+     *   action u16 @0 (2=DOWN, 3=MOVE, 1=UP) | x u16 @2 | y u32 @4 | timestamp u32 @8 | …
+     * Coordinates are in the bike canvas we negotiated ([negW]x[negH]). Forward to the Android Auto
+     * session via [AaVideoBridge.touchSink], which letterbox-maps them into AA video space and sends
+     * them over the AAP INPUT channel. Actions are normalised to AaInput's 0=DOWN/1=UP/2=MOVE.
+     */
+    private fun handleTouch(tag: String, body: ByteArray) {
+        if (body.size < 8) { log("[$tag] touch frame too short (${body.size}b)"); return }
+        val b = ByteBuffer.wrap(body).order(ByteOrder.LITTLE_ENDIAN)
+        val rawAction = b.getShort(0).toInt() and 0xFFFF
+        val x = b.getShort(2).toInt() and 0xFFFF
+        val y = b.getInt(4)
+        val action = when (rawAction) {
+            2 -> 0   // DOWN
+            1 -> 1   // UP
+            3 -> 2   // MOVE
+            else -> { log("[$tag] touch: unknown action=$rawAction x=$x y=$y"); return }
+        }
+        // Log DOWN/UP (and the first MOVE) so the coordinate mapping is verifiable without move spam.
+        if (action != 2 || (touchMoves++ % 30) == 0) {
+            log("[$tag] TOUCH ${if (action==0) "DOWN" else if (action==1) "UP" else "MOVE"} bike=($x,$y) canvas=${negW}x$negH")
+        }
+        val sink = AaVideoBridge.touchSink
+        if (sink == null) {
+            if (action != 2) log("[$tag] touch dropped — no AA session")
+        } else {
+            sink(action, x, y)
         }
     }
 

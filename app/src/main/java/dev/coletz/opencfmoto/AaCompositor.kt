@@ -119,6 +119,22 @@ class AaCompositor(private val log: (String) -> Unit) {
         }
     }
 
+    /**
+     * Inverse of the letterbox: map a point in the bike canvas (the surface whose size we reported to
+     * the bike, [canvasW]x[canvasH]) to the Android Auto source video space ([srcW]x[srcH]). Returns
+     * null if the point falls in a black bar (outside the drawn AA rect) so the caller can drop it.
+     * Used to translate dashboard touch coordinates into AA input coordinates.
+     */
+    fun mapCanvasToSource(cx: Int, cy: Int): Pair<Int, Int>? {
+        if (vpW == 0 || vpH == 0 || srcW == 0 || srcH == 0) return null
+        val rx = cx - vpX
+        val ry = cy - vpY
+        if (rx < 0 || ry < 0 || rx >= vpW || ry >= vpH) return null
+        val sx = (rx.toLong() * srcW / vpW).toInt().coerceIn(0, srcW - 1)
+        val sy = (ry.toLong() * srcH / vpH).toInt().coerceIn(0, srcH - 1)
+        return sx to sy
+    }
+
     /** Fit src aspect inside the canvas, centered (letterbox). */
     private fun computeViewport() {
         if (canvasW == 0 || canvasH == 0 || srcW == 0 || srcH == 0) return

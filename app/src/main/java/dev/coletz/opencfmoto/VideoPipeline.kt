@@ -299,6 +299,10 @@ class VideoPipeline(
     /** Compositor mode: the surface the AA decoder renders into (letterboxed before the encoder). */
     fun decoderInputSurface(): android.view.Surface? = aaCompositor?.inputSurface
 
+    /** Compositor mode: map a bike-canvas touch point to Android Auto source coords (letterbox-aware);
+     *  null if the point is in a black bar. See AaCompositor.mapCanvasToSource. */
+    fun mapBikeTouchToSource(cx: Int, cy: Int): Pair<Int, Int>? = aaCompositor?.mapCanvasToSource(cx, cy)
+
     /** Called by the data socket on each REQ_RV_DATA_NEXT(114). Returns one access unit. */
     fun pollFrame(timeoutMs: Long): ByteArray? =
         try { frameQueue.pollFirst(timeoutMs, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { null }
