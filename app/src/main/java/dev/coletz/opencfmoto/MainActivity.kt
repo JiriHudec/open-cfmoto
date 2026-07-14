@@ -65,13 +65,15 @@ class MainActivity : AppCompatActivity() {
         if (pendingAaStart) {
             pendingAaStart = false
             log("→ starting Android Auto receiver (loopback self-mode). Ensure Android Auto is installed & set up.")
-            // Once AA video is steady, join the bike Wi-Fi and run the PXC handshake.
+            // Once AA video is steady, join the bike Wi-Fi and run the PXC handshake. The callback
+            // fires off process-global state ([joinAndStart] uses applicationContext + BikeLink.prober),
+            // NOT this activity instance: triggering Google Android Auto can destroy/recreate
+            // MainActivity before steady video arrives, and the hand-off must still complete. The
+            // guard in onDestroy keeps this callback alive while the AA service runs.
             AaVideoBridge.onSteadyVideo = {
-                runOnUiThread {
-                    AaVideoBridge.onSteadyVideo = null
-                    log("→ Android Auto video is live — joining bike Wi-Fi")
-                    joinAndStart(qr)
-                }
+                AaVideoBridge.onSteadyVideo = null
+                LogBus.log("→ Android Auto video is live — joining bike Wi-Fi")
+                joinAndStart(qr)
             }
             AndroidAutoService.start(this)
             // Trigger Google AA to project from the FOREGROUND activity (background-activity-launch
@@ -146,7 +148,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        prober = EasyConnProber(applicationContext, ::log)
+        // Reuse the process-global prober if one already exists (e.g. this activity was recreated
+        // while the Android Auto receiver kept running in the foreground service). Constructing a
+        // fresh one here would orphan the running instance — leaking its sockets/threads and making
+        // the Stop button operate on the wrong object. See [BikeLink].
+        prober = BikeLink.prober ?: EasyConnProber(applicationContext, LogBus::log).also { BikeLink.prober = it }
 
         // Android 13+: request notification permission up front so the mediaProjection
         // foreground-service notification can be posted (some setups gate the FGS on it).
@@ -236,36 +242,46 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         LogBus.listener = null
-        AaVideoBridge.onSteadyVideo = null
-        prober.stop()
-        bleWakeUp?.stop()
-        bleWakeUp = null
-        ProjectionHolder.projection?.let { try { it.stop() } catch (_: Exception) {} }
-        ProjectionHolder.projection = null
-        ProjectionService.stop(this)
-        // NOTE: AndroidAutoService is intentionally NOT stopped here — it is a foreground service
-        // meant to keep running when the phone is backgrounded/locked. Use "Stop Android Auto".
-        BikeWifi.leave(this, ::log)
+        // When the Android Auto receiver service is running, the whole AA→bike chain (receiver +
+        // encoder in the FGS, plus the Wi-Fi + prober in process globals) must OUTLIVE this activity:
+        // launching Google Android Auto can destroy/recreate MainActivity mid-hand-off, and tearing
+        // the bike down here is exactly what left the dash on a black screen (the pending
+        // onSteadyVideo hand-off was cancelled before it could fire). Only tear down when AA is NOT
+        // running — i.e. the mirror path or a genuine exit. Full teardown is the "Stop" button.
+        if (!AndroidAutoService.isRunning) {
+            AaVideoBridge.onSteadyVideo = null
+            prober.stop()
+            bleWakeUp?.stop()
+            bleWakeUp = null
+            ProjectionHolder.projection?.let { try { it.stop() } catch (_: Exception) {} }
+            ProjectionHolder.projection = null
+            ProjectionService.stop(this)
+            // NOTE: AndroidAutoService is intentionally NOT stopped here — it is a foreground service
+            // meant to keep running when the phone is backgrounded/locked. Use "Stop Android Auto".
+            BikeWifi.leave(this, ::log)
+        }
         super.onDestroy()
     }
 
     private fun joinAndStart(qr: QrData) {
+        // Use applicationContext + the process-global prober (not this activity), so the AA→bike
+        // hand-off completes even if this activity was destroyed/recreated after it was armed.
         BikeWifi.join(
-            context = this,
+            context = applicationContext,
             ssid = qr.ssid,
             psk = qr.pwd,
             onAvailable = {
                 // BLE wake-up is NOT required for projection (confirmed via TCP capture) — go
                 // straight to the PXC flow. runBleWakeUpThenProber() remains available if needed.
-                log("→ Wi-Fi bound; starting EasyConn PXC flow …")
+                LogBus.log("→ Wi-Fi bound; starting EasyConn PXC flow …")
                 try {
-                    prober.start(BikeWifi.currentNetwork)
+                    (BikeLink.prober ?: prober).start(BikeWifi.currentNetwork)
                 } catch (e: Exception) {
-                    log("prober start failed: $e")
+                    LogBus.log("prober start failed: $e")
                 }
             },
-            onLost = { log("bike network lost") },
-            log = ::log,
+            onLost = { LogBus.log("bike network lost") },
+            log = LogBus::log,
         )
     }
 
@@ -322,11 +338,22 @@ class MainActivity : AppCompatActivity() {
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             val file = File(dir, "opencfmoto-$stamp.log")
             file.writeText(LogBus.snapshot())
-            val uri: Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
+            val uris = ArrayList<Uri>()
+            uris.add(FileProvider.getUriForFile(this, "$packageName.fileprovider", file))
+
+            // Attach any diagnostic H.264 dumps (VideoPipeline writes these to <externalFiles>/video).
+            val videoDir = File(getExternalFilesDir(null), "video")
+            val dumps = videoDir.listFiles { f -> f.name.endsWith(".h264") }?.sortedBy { it.name } ?: emptyList()
+            for (d in dumps) {
+                uris.add(FileProvider.getUriForFile(this, "$packageName.fileprovider", d))
+                log("attaching video dump: ${d.name} (${d.length()} bytes)")
+            }
+
+            val send = Intent(if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND).apply {
+                type = if (uris.size > 1) "*/*" else "text/plain"
                 putExtra(Intent.EXTRA_SUBJECT, "opencfmoto log $stamp")
-                putExtra(Intent.EXTRA_STREAM, uri)
+                if (uris.size > 1) putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                else putExtra(Intent.EXTRA_STREAM, uris[0])
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(send, "Share log"))

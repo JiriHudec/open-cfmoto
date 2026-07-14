@@ -281,6 +281,11 @@ class EasyConnProber(
                         ownsVideo = true
                     }
                 }
+                // Ensure the first frame the bike pulls is a keyframe (SPS+PPS+IDR). Critical for the
+                // Android Auto path, whose encoder has been running since REQ_CONFIG_CAPTURE — its
+                // initial IDR is already gone from the queue, so without this the dash starts mid-GOP
+                // on a P-frame and stays black. See VideoPipeline.onBikeDataStart().
+                video?.onBikeDataStart()
                 log("[$tag] → RLY 113")
                 sendReqBase(out, 113, null)
             }

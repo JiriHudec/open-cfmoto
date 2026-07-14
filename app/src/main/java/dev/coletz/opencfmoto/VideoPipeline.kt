@@ -65,6 +65,17 @@ class VideoPipeline(
 
     private val frameQueue = LinkedBlockingDeque<ByteArray>(8)
     @Volatile private var codecConfig: ByteArray? = null   // SPS/PPS
+    // When set, the drain loop discards encoder output until the next keyframe, so the first frame a
+    // freshly-attached bike client receives is a full SPS+PPS+IDR. See onBikeDataStart().
+    @Volatile private var awaitKeyframe = false
+
+    // Diagnostic: dump the exact Annex-B H.264 access units we send to the bike into a .h264 file so
+    // the stream can be inspected off-device (ffprobe/ffmpeg). Bounded to DUMP_CAP frames so it never
+    // grows unbounded or stalls the send path for long. Filename is tagged by source (aa/mirror/own)
+    // so an AA capture and a mirror capture can be compared directly. See docs/05-DEBUG-KNOWLEDGE.md.
+    private var dumpOut: java.io.OutputStream? = null
+    private var dumpFrames = 0
+    private var dumpPath: String? = null
 
     fun start() {
         if (running) return
@@ -110,6 +121,12 @@ class VideoPipeline(
                 // an idle app) then produces zero frames and the bike times out. Repeat the last
                 // frame if nothing new arrives so output is continuous even when the screen is still.
                 setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L) // 100ms → ≥10fps floor
+                // Force strictly-ascending output with no B-frame reordering: the bike wire format
+                // sends raw access units with NO timestamps, so a decoder that received reordered
+                // (B-)frames could never reassemble display order → black/garbage. Baseline already
+                // forbids B-frames; this also covers the Main/High fallback path. Hint only — encoders
+                // that don't support it ignore it.
+                setInteger(MediaFormat.KEY_LATENCY, 1)
             }
             val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             val forceBaseline = BikeProfileHolder.active.forceBaseline
@@ -135,6 +152,7 @@ class VideoPipeline(
             codec = c
             encoderW = w; encoderH = h
             log("[VIDEO] encoder started ${w}x${h} h264 30fps")
+            maybeStartDump()
             if (drainThread == null) drainThread = thread(name = "video-drain", isDaemon = true) { drainLoop() }
             return true
         } catch (e: Exception) {
@@ -250,11 +268,19 @@ class VideoPipeline(
                     log("[VIDEO] got codec config (SPS/PPS) ${bytes.size}b")
                 } else {
                     val isKey = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-                    val out = if (isKey && codecConfig != null) codecConfig!! + bytes else bytes
-                    // Keep the queue fresh: if full, drop oldest so we never lag far behind.
-                    if (!frameQueue.offerLast(out)) {
-                        frameQueue.pollFirst()
-                        frameQueue.offerLast(out)
+                    if (awaitKeyframe && !isKey) {
+                        // A bike client just attached but this is a P-frame — it references frames the
+                        // client never received, so serving it would leave the dash decoder uninitialised
+                        // (black). Drop until the next keyframe. (Buffer still released below.)
+                    } else {
+                        if (isKey) awaitKeyframe = false
+                        val out = if (isKey && codecConfig != null) codecConfig!! + bytes else bytes
+                        writeDump(out)
+                        // Keep the queue fresh: if full, drop oldest so we never lag far behind.
+                        if (!frameQueue.offerLast(out)) {
+                            frameQueue.pollFirst()
+                            frameQueue.offerLast(out)
+                        }
                     }
                 }
             }
@@ -277,8 +303,73 @@ class VideoPipeline(
     fun pollFrame(timeoutMs: Long): ByteArray? =
         try { frameQueue.pollFirst(timeoutMs, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { null }
 
+    /**
+     * A bike video client is (re)attaching and about to pull frames (REQ_RV_DATA_START). Guarantee the
+     * FIRST access unit it receives is a full keyframe (SPS+PPS+IDR):
+     *  1. flush stale frames already in the queue (they may be mid-GOP P-frames),
+     *  2. drop further encoder output until the next keyframe (awaitKeyframe), and
+     *  3. ask the encoder for an immediate sync frame so that keyframe arrives right away.
+     *
+     * Without this, Android Auto mode is black: its encoder is created at REQ_CONFIG_CAPTURE — up to a
+     * second before the bike opens the data socket — so the initial IDR is long evicted from the small
+     * queue and the bike starts on a P-frame with no SPS/PPS, leaving the dash decoder uninitialised.
+     * (Mirror mode avoided this only by creating its encoder lazily right as the bike attaches.)
+     */
+    fun onBikeDataStart() {
+        frameQueue.clear()
+        awaitKeyframe = true
+        try {
+            codec?.setParameters(android.os.Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+            })
+            log("[VIDEO] bike attached → flushed queue + requested IDR (first frame will be a keyframe)")
+        } catch (e: Exception) {
+            log("[VIDEO] requestKeyframe failed: $e")
+        }
+    }
+
+    private fun maybeStartDump() {
+        if (!DUMP_H264 || dumpOut != null) return
+        try {
+            val base = context.getExternalFilesDir(null) ?: run { log("[DUMP] no external files dir"); return }
+            val dir = java.io.File(base, "video").apply { mkdirs() }
+            val tag = when {
+                compositor -> "aa"
+                ProjectionHolder.projection != null -> "mirror"
+                else -> "own"
+            }
+            val f = java.io.File(dir, "opencfmoto-video-$tag.h264")
+            dumpOut = java.io.BufferedOutputStream(java.io.FileOutputStream(f))
+            dumpFrames = 0
+            dumpPath = f.absolutePath
+            log("[DUMP] recording H.264 → ${f.absolutePath} (first $DUMP_CAP frames, then auto-stops)")
+        } catch (e: Exception) {
+            log("[DUMP] open failed: $e"); dumpOut = null
+        }
+    }
+
+    /** Append one Annex-B access unit to the diagnostic dump until the cap, then close. */
+    private fun writeDump(au: ByteArray) {
+        val d = dumpOut ?: return
+        try {
+            d.write(au)
+            dumpFrames++
+            if (dumpFrames >= DUMP_CAP) {
+                d.flush(); d.close(); dumpOut = null
+                log("[DUMP] complete: $dumpPath ($dumpFrames frames) — Share Log to send it")
+            }
+        } catch (e: Exception) {
+            try { d.close() } catch (_: Exception) {}
+            dumpOut = null
+            log("[DUMP] write failed: $e")
+        }
+    }
+
     fun stop() {
         running = false
+        try { dumpOut?.flush(); dumpOut?.close() } catch (_: Exception) {}
+        if (dumpOut != null) log("[DUMP] stopped: $dumpPath ($dumpFrames frames) — Share Log to send it")
+        dumpOut = null
         drainThread?.interrupt(); drainThread = null
         try { aaCompositor?.release() } catch (_: Exception) {}
         aaCompositor = null
@@ -295,5 +386,13 @@ class VideoPipeline(
         inputSurface = null
         frameQueue.clear()
         codecConfig = null
+    }
+
+    companion object {
+        /** Diagnostic build flag: dump the H.264 we send to the bike (bounded). Turn on to capture a
+         *  .h264 of the exact wire stream for offline ffprobe analysis; off for normal use. */
+        const val DUMP_H264 = false
+        /** How many access units to capture before auto-stopping the dump (~20s at 30fps). */
+        const val DUMP_CAP = 600
     }
 }

@@ -231,8 +231,11 @@ object Cfdl26LandscapeProfile : BikeProfile {
     override val supportsScreenTouch = true
     override val advertisedSupportFunction = 128
 
-    /** The 800MT has a landscape screen. Ask AA for landscape 1280x720; the compositor letterboxes it. */
-    override val aaVideo = AaVideoSpec(AaResolution.LANDSCAPE_1280x720, dpi = 160)
+    /** The 800MT has a landscape screen. Ask AA for landscape 800x480 — the resolution proven to
+     *  stream end-to-end on this dash (see docs/05-DEBUG-KNOWLEDGE.md). The compositor letterboxes it
+     *  into the bike's ~1280x576 canvas. 1280x720 is sharper but unverified end-to-end; revisit once
+     *  AA is confirmed working. */
+    override val aaVideo = AaVideoSpec(AaResolution.LANDSCAPE_800x480, dpi = 160)
 
     override fun matchesModelId(modelId: String): Boolean = modelId.trim() == "37426"
 
@@ -252,7 +255,13 @@ object Cfdl26LandscapeProfile : BikeProfile {
             put("supportScreenTouch", true)
         }
 
-    override val forceBaseline = false
+    // Baseline@3.1 (the interface default). This USED to be false (Main/High), which is the prime
+    // suspect for the Android Auto black screen: the dash accepts and continuously pulls our Main/High
+    // frames but renders nothing (embedded decoders often only handle Baseline — no CABAC/B-frame
+    // reordering, which the PTS-less bike wire format can't support anyway). Baseline is a strict
+    // subset, so it cannot regress the working mirror path, and createEncoder falls back to default
+    // if a device can't configure it. See docs/05-DEBUG-KNOWLEDGE.md §2.
+    // override val forceBaseline defaults to true.
 
     override fun handleUnknownControl(
         tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
