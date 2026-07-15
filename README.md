@@ -77,7 +77,8 @@ its **pairing QR code** — the same QR the official CFMoto app uses.
 The app isn't on the Play Store — you sideload the APK.
 
 1. Download the latest **`OpenCfMoto.apk`** from the
-   **[Releases page](https://github.com/BojanJ/open-cfmoto/releases/latest)**.
+   **[Releases page](https://github.com/zanderp/open-cfmoto/releases/latest)**
+   (direct link: <https://github.com/zanderp/open-cfmoto/releases/latest/download/OpenCfMoto.apk>).
 2. Tap it in a file manager / your browser downloads to install; allow installation from your
    browser/file manager when Android prompts about "unknown sources".
 3. Open **OpenCfMoto** once and grant the permissions it requests:
