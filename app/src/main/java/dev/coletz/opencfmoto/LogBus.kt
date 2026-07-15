@@ -1,5 +1,6 @@
 package dev.coletz.opencfmoto
 
+import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,8 +23,13 @@ object LogBus {
         val line = "${ts.format(Date())}  $msg"
         sb.append(line).append('\n')
         if (sb.length > 512 * 1024) sb.delete(0, sb.length - 256 * 1024)
+        // Mirror to logcat so the full diagnostic stream is capturable over adb (`adb logcat -s
+        // OpenCfMoto:*`) during on-hardware debugging, not just in the in-app log view.
+        Log.i(TAG, msg)
         try { listener?.invoke(line) } catch (_: Exception) {}
     }
+
+    const val TAG = "OpenCfMoto"
 
     @Synchronized fun snapshot(): String = sb.toString()
 

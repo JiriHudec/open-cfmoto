@@ -22,8 +22,8 @@ class ServiceDiscoveryResponse
         // before AA starts, refined by CLIENT_INFO) supplies the AA resolution/orientation + dpi.
         // CFDL16 → landscape 800x480 @160; CFDL26 (1000 MT-X) → portrait 720x1280 @240. These read
         // the live holder so AaReceiver's decoder fallback dims track the selected profile too.
-        val AA_WIDTH: Int get() = BikeProfileHolder.active.aaVideo.width
-        val AA_HEIGHT: Int get() = BikeProfileHolder.active.aaVideo.height
+        val AA_WIDTH: Int get() = BikeProfileHolder.aaVideo.width
+        val AA_HEIGHT: Int get() = BikeProfileHolder.aaVideo.height
 
         private fun protoResolution(r: AaResolution):
             Control.Service.MediaSinkService.VideoConfiguration.VideoCodecResolutionType = when (r) {
@@ -38,7 +38,7 @@ class ServiceDiscoveryResponse
         }
 
         private fun makeProto(): Message {
-            val spec = BikeProfileHolder.active.aaVideo
+            val spec = BikeProfileHolder.aaVideo
             val services = mutableListOf<Control.Service>()
 
             // --- Sensor service (driving status + night) ---

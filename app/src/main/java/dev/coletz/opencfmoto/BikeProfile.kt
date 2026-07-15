@@ -71,6 +71,14 @@ interface BikeProfile {
     /** Whether to force the H.264 encoder to Baseline Profile @ Level 3.1. */
     val forceBaseline: Boolean get() = true
 
+    // ---- encoder tuning (defaults reproduce the proven values; override per dash to tune) ----
+    /** Target H.264 bitrate in bits/sec. */
+    val videoBitrate: Int get() = 2_500_000
+    /** Target encoder frame rate (fps). */
+    val videoFrameRate: Int get() = 30
+    /** Keyframe (IDR) interval in seconds. Frequent keyframes let late/dropped joiners recover. */
+    val videoIFrameIntervalSec: Int get() = 1
+
     /** Media-plane GET_VERSION reply (version, subVersion). */
     fun versionReply(): Pair<Int, Int> = 3 to 1
 }
@@ -118,6 +126,17 @@ object BikeProfiles {
  */
 object BikeProfileHolder {
     @Volatile var active: BikeProfile = BikeProfiles.legacy
+
+    /**
+     * Optional user override for the Android Auto video resolution (see [VideoPrefs.ResolutionMode]).
+     * When null the active profile's own [BikeProfile.aaVideo] is used. Set from the QR path in
+     * [MainActivity] before AA starts, so the whole AA stack ([ServiceDiscoveryResponse], the
+     * compositor, the decoder fallback dims) reads one consistent spec via [aaVideo].
+     */
+    @Volatile var aaVideoOverride: AaVideoSpec? = null
+
+    /** The effective Android Auto video spec: the user override if set, else the active profile's. */
+    val aaVideo: AaVideoSpec get() = aaVideoOverride ?: active.aaVideo
 }
 
 /** Shared base CLIENT_INFO reply. Keys/order match the original PxcHandshake.buildClientInfoReply so

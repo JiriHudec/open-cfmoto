@@ -112,11 +112,13 @@ class VideoPipeline(
     /** Create + start the H.264 encoder at [w]x[h] and its drain thread. Returns false on failure. */
     private fun createEncoder(w: Int, h: Int): Boolean {
         try {
+            val profile = BikeProfileHolder.active
+            val bitrate = VideoPrefs.bitrateFor(context, profile)
             fun baseFormat() = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 2_500_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)   // frequent keyframes for late joiners
+                setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, profile.videoFrameRate)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, profile.videoIFrameIntervalSec) // frequent keyframes for late joiners
                 // Surface-input encoders only emit on new buffers; a STATIC screen (e.g. mirror of
                 // an idle app) then produces zero frames and the bike times out. Repeat the last
                 // frame if nothing new arrives so output is continuous even when the screen is still.
@@ -151,7 +153,7 @@ class VideoPipeline(
             c.start()
             codec = c
             encoderW = w; encoderH = h
-            log("[VIDEO] encoder started ${w}x${h} h264 30fps")
+            log("[VIDEO] encoder started ${w}x${h} h264 ${profile.videoFrameRate}fps ${bitrate / 1000}kbps (${VideoPrefs.get(context).name.lowercase()})")
             maybeStartDump()
             if (drainThread == null) drainThread = thread(name = "video-drain", isDaemon = true) { drainLoop() }
             return true
@@ -175,11 +177,14 @@ class VideoPipeline(
             return
         }
         if (!createEncoder(w, h)) return
-        val src = BikeProfileHolder.active.aaVideo
+        val src = BikeProfileHolder.aaVideo
         val surf = inputSurface
         if (surf != null) {
-            aaCompositor?.setOutput(surf, w, h, src.width, src.height)
-            log("[VIDEO] bike canvas ${w}x$h configured; AA source ${src.width}x${src.height} → letterboxed")
+            val fit = VideoPrefs.fit(context)
+            val power = VideoPrefs.power(context)
+            aaCompositor?.setFrameCap(power.fps)
+            aaCompositor?.setOutput(surf, w, h, src.width, src.height, fit)
+            log("[VIDEO] bike canvas ${w}x$h configured; AA source ${src.width}x${src.height} → fit=$fit power=${power.fps}fps")
         }
     }
 

@@ -15,6 +15,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
@@ -39,6 +40,8 @@ class EasyConnProber(
         const val BIKE_PROBE_PORT = 10930   // bike's EasyConn mDNS/probe endpoint
         const val SPOOFED_PACKAGE = "com.cfmoto.cfmotointernational"
         private val LISTEN_PORTS = intArrayOf(PORT_PXC_CTRL, PORT_MEDIA_CTRL, PORT_MEDIA_DATA)
+        /** How many times to auto re-probe after a link drop before giving up (user taps Connect). */
+        private const val MAX_RECONNECT_ATTEMPTS = 10
     }
 
     private val handshake = PxcHandshake(log)
@@ -53,17 +56,40 @@ class EasyConnProber(
     @Volatile private var negH = 384
     @Volatile private var framesSent = 0
     @Volatile private var touchMoves = 0
+    @Volatile private var lastFrameAt = 0L
+
+    // Live client sockets the bike has opened back to us, so the watchdog ([AndroidAutoService]) can
+    // force a clean reconnect by dropping them (which trips the existing onAllConnectionsClosed path).
+    private val activeClients = java.util.Collections.synchronizedList(ArrayList<Socket>())
+
+    // Auto-reconnect: the phone keeps listening on all three ports for the whole session, so if the
+    // dash drops the link while Wi-Fi is still up we just re-send the mDNS probe to invite it back —
+    // no user Stop/Start. Retained connection params + a live-connection counter drive this.
+    @Volatile private var myIp: Inet4Address? = null
+    @Volatile private var bikeIp: Inet4Address? = null
+    @Volatile private var network: Network? = null
+    private val liveConns = AtomicInteger(0)
+    @Volatile private var everConnected = false
+    @Volatile private var reprobing = false
+    @Volatile private var reconnectAttempts = 0
 
     fun start(network: Network?) {
         if (running) { log("already running"); return }
         probed = false
         framesSent = 0
+        lastFrameAt = 0L
+        everConnected = false
+        reconnectAttempts = 0
+        liveConns.set(0)
+        this.network = network
         dumpEnvironment(network)
 
         val myIp = pickBikeInterfaceIp(network)
         if (myIp == null) { log("could not resolve our IPv4 on the bike network; aborting"); return }
         val bikeIp = resolveGateway(network)
         if (bikeIp == null) { log("could not resolve bike gateway IP; aborting"); return }
+        this.myIp = myIp
+        this.bikeIp = bikeIp
         log("our IP=${myIp.hostAddress}  bike IP=${bikeIp.hostAddress}")
 
         running = true
@@ -91,16 +117,58 @@ class EasyConnProber(
     fun stop() {
         running = false
         probed = false
+        everConnected = false
+        reprobing = false
         // Only stop the pipeline if we created it; the shared Android Auto pipeline is owned
         // by AndroidAutoService and must outlive a bike disconnect.
         if (ownsVideo) video?.stop()
         video = null; ownsVideo = false
         heartbeatThread?.interrupt(); heartbeatThread = null
+        synchronized(activeClients) {
+            for (s in activeClients.toList()) try { s.close() } catch (_: Exception) {}
+            activeClients.clear()
+        }
         for (s in servers) try { s.close() } catch (_: IOException) {}
         servers.clear()
         multicastLock?.let { try { if (it.isHeld) it.release() } catch (_: Exception) {} }
         multicastLock = null
         log("stopped")
+    }
+
+    // ---- Watchdog surface (read/driven by AndroidAutoService's auto-recovery loop) ----
+
+    /** True while the prober is live (started, not stopped). */
+    val isRunning: Boolean get() = running
+
+    /** True once at least one frame has been delivered to the dash this session. */
+    val isStreaming: Boolean get() = running && framesSent > 0
+
+    /** Milliseconds since the last frame was sent to the dash (Long.MAX_VALUE if none yet). */
+    fun msSinceLastFrame(): Long =
+        if (lastFrameAt == 0L) Long.MAX_VALUE else System.currentTimeMillis() - lastFrameAt
+
+    /**
+     * Force a clean reconnect: drop every live bike socket. Each read loop then ends and, once the
+     * last one closes, [onAllConnectionsClosed] re-probes — reusing the proven reconnect path. Used
+     * by the watchdog when frames stall while the sockets are (half-)open and won't close on their own.
+     */
+    fun forceReconnect() {
+        val n = activeClients.size
+        log("[watchdog] forcing reconnect — dropping $n live socket(s)")
+        synchronized(activeClients) {
+            for (s in activeClients.toList()) try { s.close() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Re-arm reconnection after the retry budget was exhausted ([Phase.ERROR]). Resets the attempt
+     * counter and kicks a fresh probe so a bike that comes back into range links up on its own.
+     */
+    fun rearmFromError() {
+        if (!running || liveConns.get() > 0) return
+        log("[watchdog] re-arming reconnect after error")
+        reconnectAttempts = 0
+        onAllConnectionsClosed()
     }
 
     /** Step 3: phone→bike probe. cmd 0x70000010 + JSON; expect 0x70000011 {"status":true}. */
@@ -153,9 +221,56 @@ class EasyConnProber(
                     if (running) log("[:$port] accept ended: ${e.message}"); break
                 }
                 log("[:$port] <<< bike connected from ${client.remoteSocketAddress}")
-                thread(name = "ec-conn-$port", isDaemon = true) { readLoop(port, client) }
+                everConnected = true
+                reconnectAttempts = 0            // a fresh connection resets the retry budget
+                liveConns.incrementAndGet()
+                activeClients.add(client)
+                thread(name = "ec-conn-$port", isDaemon = true) {
+                    try { readLoop(port, client) }
+                    finally {
+                        activeClients.remove(client)
+                        if (liveConns.decrementAndGet() == 0) onAllConnectionsClosed()
+                    }
+                }
             }
         }
+
+    /**
+     * All bike sockets have closed. If we're still running and the link had connected at least once,
+     * the dash likely dropped the session (a UI transition, brief Wi-Fi blip, etc.) while the phone
+     * kept listening. Re-send the mDNS probe to invite it straight back — no user Stop/Start — with a
+     * capped, backed-off retry so a genuinely-gone bike doesn't spin forever.
+     */
+    private fun onAllConnectionsClosed() {
+        if (!running || !everConnected || reprobing) return
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            log("[reconnect] gave up after $reconnectAttempts attempts — tap Connect to retry")
+            ConnectionState.set(Phase.ERROR, "lost bike link")
+            return
+        }
+        reprobing = true
+        ConnectionState.set(Phase.RECONNECTING, "attempt ${reconnectAttempts + 1}")
+        thread(name = "ec-reprobe", isDaemon = true) {
+            try {
+                while (running && liveConns.get() == 0 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts++
+                    val backoff = minOf(1000L * reconnectAttempts, 5000L)
+                    log("[reconnect] link lost — re-probing (attempt $reconnectAttempts) in ${backoff}ms")
+                    try { Thread.sleep(backoff) } catch (_: InterruptedException) { return@thread }
+                    if (!running || liveConns.get() > 0) return@thread
+                    val bi = bikeIp; val mi = myIp
+                    if (bi == null || mi == null) { log("[reconnect] no cached IPs — abort"); return@thread }
+                    probed = false
+                    framesSent = 0   // so the first frame after reconnect re-signals STREAMING
+                    sendMdnsRespond(bi, mi, network)
+                    // Give the dash a moment to connect back before deciding to try again.
+                    try { Thread.sleep(2500) } catch (_: InterruptedException) { return@thread }
+                }
+            } finally {
+                reprobing = false
+            }
+        }
+    }
 
     private fun readLoop(port: Int, socket: Socket) {
         val tag = ":$port"
@@ -235,6 +350,17 @@ class EasyConnProber(
                 val wantEncoder = if (body.size >= 12) cfg.getInt(8) else 2
                 val supportExtend = if (body.size >= 30) body[29] else 0
                 log("[$tag] REQ_CONFIG_CAPTURE w=$w h=$h fps=$fps wantEncoder=$wantEncoder ext=$supportExtend len=${body.size}")
+                // Learn this dash's shape so an unknown bike auto-picks the right AA orientation next time.
+                if (w > 0 && h > 0) {
+                    val ssid = BikeMemory.lastQr(context)?.ssid
+                    DashMemory.observe(context, ssid, w, h)
+                    val dashPortrait = h > w
+                    val aaPortrait = BikeProfileHolder.aaVideo.height > BikeProfileHolder.aaVideo.width
+                    if (dashPortrait != aaPortrait) {
+                        log("[$tag] dash canvas is ${if (dashPortrait) "portrait" else "landscape"} (${w}x$h) " +
+                            "but AA is ${if (aaPortrait) "portrait" else "landscape"} — reconnect once to auto-apply the right orientation")
+                    }
+                }
                 val (rw, rh) = handshake.profile.roundCaptureDimensions(w, h)
                 negW = rw
                 negH = rh
@@ -297,6 +423,8 @@ class EasyConnProber(
                 } else {
                     sendFrameRaw(out, frame)
                     framesSent++
+                    lastFrameAt = System.currentTimeMillis()
+                    if (framesSent == 1) ConnectionState.set(Phase.STREAMING)
                     if (framesSent <= 5 || framesSent % 60 == 0)
                         log("[$tag] sent frame #$framesSent (${frame.size}b)")
                 }
@@ -311,17 +439,22 @@ class EasyConnProber(
 
     /**
      * Dash touchscreen event (PXC media cmdType 32, 18-byte body, little-endian):
-     *   action u16 @0 (2=DOWN, 3=MOVE, 1=UP) | x u16 @2 | y u32 @4 | timestamp u32 @8 | …
-     * Coordinates are in the bike canvas we negotiated ([negW]x[negH]). Forward to the Android Auto
-     * session via [AaVideoBridge.touchSink], which letterbox-maps them into AA video space and sends
-     * them over the AAP INPUT channel. Actions are normalised to AaInput's 0=DOWN/1=UP/2=MOVE.
+     *   action u16 @0 (2=DOWN, 3=MOVE, 1=UP) | x u16 @2 | y u16 @4 | pointerId u16 @6 | timestamp u32 @8 | …
+     * Coordinates are in the bike canvas we negotiated ([negW]x[negH]). The CFDL26 dash reports
+     * genuine two-finger multi-touch: the byte at offset 6 is the finger index (0/1). NOTE: Y is a
+     * 16-bit field — reading it as u32 (the old bug) folded the pointerId into the high bits, so the
+     * second finger got a bogus Y (~65 800), landed outside the canvas, and was silently dropped.
+     * Forward both pointers to the Android Auto session via [AaVideoBridge.touchSink], which
+     * letterbox-maps them into AA video space and sends them over the AAP INPUT channel as
+     * multi-touch (enabling pinch-to-zoom). Actions are normalised to AaInput's 0=DOWN/1=UP/2=MOVE.
      */
     private fun handleTouch(tag: String, body: ByteArray) {
         if (body.size < 8) { log("[$tag] touch frame too short (${body.size}b)"); return }
         val b = ByteBuffer.wrap(body).order(ByteOrder.LITTLE_ENDIAN)
         val rawAction = b.getShort(0).toInt() and 0xFFFF
         val x = b.getShort(2).toInt() and 0xFFFF
-        val y = b.getInt(4)
+        val y = b.getShort(4).toInt() and 0xFFFF
+        val pointerId = b.getShort(6).toInt() and 0xFFFF
         val action = when (rawAction) {
             2 -> 0   // DOWN
             1 -> 1   // UP
@@ -330,13 +463,13 @@ class EasyConnProber(
         }
         // Log DOWN/UP (and the first MOVE) so the coordinate mapping is verifiable without move spam.
         if (action != 2 || (touchMoves++ % 30) == 0) {
-            log("[$tag] TOUCH ${if (action==0) "DOWN" else if (action==1) "UP" else "MOVE"} bike=($x,$y) canvas=${negW}x$negH")
+            log("[$tag] TOUCH ${if (action==0) "DOWN" else if (action==1) "UP" else "MOVE"} bike=($x,$y) p$pointerId canvas=${negW}x$negH")
         }
         val sink = AaVideoBridge.touchSink
         if (sink == null) {
             if (action != 2) log("[$tag] touch dropped — no AA session")
         } else {
-            sink(action, x, y)
+            sink(action, pointerId, x, y)
         }
     }
 

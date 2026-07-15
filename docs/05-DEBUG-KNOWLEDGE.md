@@ -1,8 +1,13 @@
 # OpenCfMoto — Debug Knowledge & Android Auto Black-Screen Fix
 
-Working notes built from reading the whole codebase + the `logs/` captures. Read alongside
+Working notes built from reading the whole codebase + bike-test captures. Read alongside
 `04-APP-KNOWLEDGE-BASE.md` (which covers protocol/architecture). This file focuses on **runtime
 behavior, the actual data flow between components, and the Android Auto black-screen bug**.
+
+> **Note:** the raw `logs/*.log` / `.h264` captures referenced below are diagnostic artifacts and
+> are **no longer committed to the repo** (see `.gitignore`). Their decisive findings are quoted
+> inline here, so this document stands on its own. Regenerate fresh captures with the **Share Logs**
+> button (and `VideoPipeline.DUMP_H264` for stream dumps) when debugging on hardware.
 
 ---
 

@@ -1,5 +1,7 @@
 package dev.coletz.opencfmoto
 
+import android.net.Network
+
 /**
  * Process-global handle to the bike PXC client ([EasyConnProber]).
  *
@@ -14,4 +16,53 @@ package dev.coletz.opencfmoto
  */
 object BikeLink {
     @Volatile var prober: EasyConnProber? = null
+
+    // ---- Android Auto → bike start coordination (parallel-startup gate) ----
+    // The two slow steps used to be serial: wait for AA "steady video", THEN pop the Wi-Fi join
+    // dialog, THEN probe the bike. We now kick off the Wi-Fi join IN PARALLEL with AA boot and only
+    // start the probe once BOTH are ready — the user accepts the Wi-Fi dialog while AA is still
+    // spinning up, shaving several seconds. The bike still never gets probed before AA has frames to
+    // serve, so streaming correctness is unchanged. Lives here so a MainActivity recreation
+    // mid-startup doesn't lose the pending gate.
+    @Volatile private var aaVideoSteady = false
+    @Volatile private var bikeNetwork: Network? = null
+    @Volatile private var networkReady = false
+    @Volatile private var proberStarted = false
+
+    /** Reset the gate at the start of a fresh Android Auto connection attempt. */
+    @Synchronized
+    fun beginHandoff() {
+        aaVideoSteady = false
+        bikeNetwork = null
+        networkReady = false
+        proberStarted = false
+    }
+
+    @Synchronized
+    fun markAaVideoSteady() {
+        aaVideoSteady = true
+        maybeStartProbe()
+    }
+
+    /** [network] may be null on some devices (process already bound); readiness is the real signal. */
+    @Synchronized
+    fun markWifiReady(network: Network?) {
+        bikeNetwork = network
+        networkReady = true
+        maybeStartProbe()
+    }
+
+    private fun maybeStartProbe() {
+        if (proberStarted || !aaVideoSteady || !networkReady) return
+        val p = prober ?: return
+        proberStarted = true
+        LogBus.log("→ AA video + bike Wi-Fi both ready — starting EasyConn PXC flow …")
+        ConnectionState.set(Phase.PXC_CONNECTING)
+        try {
+            p.start(bikeNetwork)
+        } catch (e: Exception) {
+            LogBus.log("prober start failed: $e")
+            ConnectionState.set(Phase.ERROR, "prober start failed")
+        }
+    }
 }

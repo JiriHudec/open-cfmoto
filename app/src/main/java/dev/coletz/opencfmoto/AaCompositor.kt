@@ -18,13 +18,13 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
- * GPU letterbox compositor for the Android Auto → bike video path.
+ * GPU fit/scale compositor for the Android Auto → bike video path.
  *
  * The AA video decoder renders into [inputSurface] (backed by a [SurfaceTexture]). Each decoded
- * frame is drawn — aspect-preserved and centered, on a black background — into the encoder's input
- * surface (set later via [setOutput], once the bike tells us its canvas size). This decouples the
- * AA source resolution (e.g. portrait 720x1280) from the bike canvas (e.g. 800x944): the source no
- * longer gets stretched to fill a different-shaped canvas — it's letterboxed.
+ * frame is drawn — centered, on a black background — into the encoder's input surface (set later via
+ * [setOutput], once the bike tells us its canvas size). This decouples the AA source resolution
+ * (a fixed 16:9-ish landscape/portrait) from the differently-shaped bike canvas. The user's
+ * [ScreenFit] preference chooses how: FILL (cover/crop), FIT (letterbox), or STRETCH (distort).
  *
  * [inputSurface] exists immediately (before the bike connects) so AA can reach steady video, which
  * is what triggers the bike hand-off in the first place. Until [setOutput] is called the render
@@ -64,14 +64,25 @@ class AaCompositor(private val log: (String) -> Unit) {
     @Volatile private var vpY = 0
     @Volatile private var vpW = 0
     @Volatile private var vpH = 0
+    @Volatile private var fitMode: ScreenFit = ScreenFit.FILL
 
     private val texMatrix = FloatArray(16)
 
-    // Keep-alive: once we have a decoded frame, re-emit it to the encoder at ~15fps whenever the AA
-    // decoder goes quiet, so the bike's media socket never times out during AA video pauses.
+    // Frame pacing (battery): the compositor throttles live AA frames to [minFrameIntervalMs] (set
+    // from the user's PowerMode) so we don't GPU-composite + hardware-encode + Wi-Fi-transmit more
+    // often than needed. A frame that arrives too soon is coalesced (its texture is still latched)
+    // and flushed by the keep-alive tick, so no motion is lost — we just cap the rate.
     @Volatile private var hasContent = false
+    @Volatile private var pendingFrame = false
     private var lastDrawMs = 0L
-    private val KEEPALIVE_INTERVAL_MS = 66L  // ~15 fps floor to the bike
+    @Volatile private var minFrameIntervalMs = 42L  // default 24 fps; overridden by setFrameCap()
+
+    // Keep-alive cadence. The tick is fast enough to promptly flush a coalesced trailing frame after
+    // motion stops; the idle re-draw is deliberately slow — the bike only needs a frame every ~9s
+    // (CLIENT_INFO socketTimeoutPeriodWifi) to stay connected, so re-encoding a *static* screen more
+    // than ~twice a second is wasted heat. This is the big idle-power win over the old 15fps floor.
+    private val KEEPALIVE_TICK_MS = 150L
+    private val IDLE_REDRAW_MS = 2000L
 
     // Full-screen quad (triangle strip): pos.xy + tex.uv interleaved.
     private val quad: FloatBuffer = ByteBuffer
@@ -91,12 +102,12 @@ class AaCompositor(private val log: (String) -> Unit) {
             try {
                 initEgl()
                 initGl()
-                val spec = BikeProfileHolder.active.aaVideo
+                val spec = BikeProfileHolder.aaVideo
                 surfaceTexture = SurfaceTexture(textureId)
                 surfaceTexture.setDefaultBufferSize(spec.width, spec.height)
                 surfaceTexture.setOnFrameAvailableListener({ handler.post { onFrame() } }, handler)
                 inputSurface = Surface(surfaceTexture)
-                handler.postDelayed(keepAlive, KEEPALIVE_INTERVAL_MS)
+                handler.postDelayed(keepAlive, KEEPALIVE_TICK_MS)
                 log("[COMPOSITOR] ready (buffer size ${spec.width}x${spec.height}) — AA decoder input surface up (no output canvas yet)")
             } catch (e: Exception) {
                 log("[COMPOSITOR] init failed: $e")
@@ -108,7 +119,7 @@ class AaCompositor(private val log: (String) -> Unit) {
     }
 
     /** Point the compositor at the encoder's input surface, sized to the bike canvas. */
-    fun setOutput(encoderSurface: Surface, cw: Int, ch: Int, sw: Int, sh: Int) {
+    fun setOutput(encoderSurface: Surface, cw: Int, ch: Int, sw: Int, sh: Int, fit: ScreenFit) {
         handler.post {
             try {
                 if (windowSurface != EGL14.EGL_NO_SURFACE) {
@@ -117,9 +128,9 @@ class AaCompositor(private val log: (String) -> Unit) {
                 }
                 val attrs = intArrayOf(EGL14.EGL_NONE)
                 windowSurface = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, encoderSurface, attrs, 0)
-                canvasW = cw; canvasH = ch; srcW = sw; srcH = sh
+                canvasW = cw; canvasH = ch; srcW = sw; srcH = sh; fitMode = fit
                 computeViewport()
-                log("[COMPOSITOR] output set canvas=${cw}x$ch src=${sw}x$sh → letterbox rect=${vpW}x$vpH @($vpX,$vpY)")
+                log("[COMPOSITOR] output set canvas=${cw}x$ch src=${sw}x$sh fit=$fit → draw rect=${vpW}x$vpH @($vpX,$vpY)")
             } catch (e: Exception) {
                 log("[COMPOSITOR] setOutput failed: $e")
             }
@@ -142,22 +153,45 @@ class AaCompositor(private val log: (String) -> Unit) {
         return sx to sy
     }
 
-    /** Fit src aspect inside the canvas, centered (letterbox). */
+    /**
+     * Derive the draw rectangle from the current [fitMode]. All three modes centre the rect, so the
+     * inverse map in [mapCanvasToSource] stays a single linear transform regardless of mode:
+     *  - [ScreenFit.FIT]     shrink to fully contain src (letterbox; rect ≤ canvas, black bars).
+     *  - [ScreenFit.FILL]    grow to fully cover the canvas (rect ≥ canvas; edges clipped by GL).
+     *  - [ScreenFit.STRETCH] rect = canvas exactly (ignores aspect).
+     */
     private fun computeViewport() {
         if (canvasW == 0 || canvasH == 0 || srcW == 0 || srcH == 0) return
         val srcAspect = srcW.toFloat() / srcH
         val canvasAspect = canvasW.toFloat() / canvasH
-        if (srcAspect < canvasAspect) {
-            // source narrower than canvas → fit height, black bars left/right
-            vpH = canvasH
-            vpW = Math.round(canvasH * srcAspect)
-        } else {
-            // source wider → fit width, black bars top/bottom
-            vpW = canvasW
-            vpH = Math.round(canvasW / srcAspect)
+        when (fitMode) {
+            ScreenFit.STRETCH -> {
+                vpW = canvasW; vpH = canvasH
+            }
+            ScreenFit.FIT -> {
+                if (srcAspect < canvasAspect) {           // src narrower → fit height, bars left/right
+                    vpH = canvasH; vpW = Math.round(canvasH * srcAspect)
+                } else {                                  // src wider → fit width, bars top/bottom
+                    vpW = canvasW; vpH = Math.round(canvasW / srcAspect)
+                }
+            }
+            ScreenFit.FILL -> {
+                if (srcAspect < canvasAspect) {           // src narrower → fit width, crop top/bottom
+                    vpW = canvasW; vpH = Math.round(canvasW / srcAspect)
+                } else {                                  // src wider → fit height, crop left/right
+                    vpH = canvasH; vpW = Math.round(canvasH * srcAspect)
+                }
+            }
         }
         vpX = (canvasW - vpW) / 2
         vpY = (canvasH - vpH) / 2
+    }
+
+    /** Set the live-frame cap (frames/sec) from the user's [dev.coletz.opencfmoto.PowerMode]. */
+    fun setFrameCap(fps: Int) {
+        val clamped = fps.coerceIn(10, 60)
+        minFrameIntervalMs = (1000L / clamped)
+        log("[COMPOSITOR] frame cap → ${clamped}fps (min ${minFrameIntervalMs}ms/frame)")
     }
 
     private fun onFrame() {
@@ -167,7 +201,10 @@ class AaCompositor(private val log: (String) -> Unit) {
             return
         }
         hasContent = true
-        drawFrame()
+        // Throttle live frames to the power-mode cap. A too-soon frame is kept (texture already
+        // latched above) and drawn by the keep-alive tick, so we cap the rate without losing motion.
+        val idleMs = android.os.SystemClock.uptimeMillis() - lastDrawMs
+        if (idleMs >= minFrameIntervalMs) drawFrame() else pendingFrame = true
     }
 
     /**
@@ -182,9 +219,15 @@ class AaCompositor(private val log: (String) -> Unit) {
         override fun run() {
             if (hasContent && windowSurface != EGL14.EGL_NO_SURFACE) {
                 val idleMs = android.os.SystemClock.uptimeMillis() - lastDrawMs
-                if (idleMs >= KEEPALIVE_INTERVAL_MS) drawFrame()
+                if (pendingFrame && idleMs >= minFrameIntervalMs) {
+                    // Flush the last coalesced live frame so motion doesn't stall at the cap.
+                    drawFrame()
+                } else if (idleMs >= IDLE_REDRAW_MS) {
+                    // Static screen: a rare re-emit purely to hold the bike's media socket open.
+                    drawFrame()
+                }
             }
-            handler.postDelayed(this, KEEPALIVE_INTERVAL_MS)
+            handler.postDelayed(this, KEEPALIVE_TICK_MS)
         }
     }
 
@@ -223,6 +266,7 @@ class AaCompositor(private val log: (String) -> Unit) {
         EGLExt.eglPresentationTimeANDROID(eglDisplay, windowSurface, System.nanoTime())
         EGL14.eglSwapBuffers(eglDisplay, windowSurface)
         lastDrawMs = android.os.SystemClock.uptimeMillis()
+        pendingFrame = false
     }
 
     fun release() {

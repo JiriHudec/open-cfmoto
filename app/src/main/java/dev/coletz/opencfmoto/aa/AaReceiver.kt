@@ -33,6 +33,13 @@ class AaReceiver(
     @Volatile private var transport: AapTransport? = null
     @Volatile private var connection: SocketAccessoryConnection? = null
     @Volatile private var steadyVideoFired = false
+
+    /**
+     * Fired when an AA session ends. [userExit] is true when the rider tapped Exit in Android Auto
+     * (VIDEO_FOCUS_NATIVE) — the caller should fully stop projection so the dash doesn't freeze on the
+     * last frame; false means a transient drop where the server keeps listening for a reconnect.
+     */
+    @Volatile var onSessionEnded: ((userExit: Boolean) -> Unit)? = null
     private val videoDecoder = VideoDecoder().apply {
         fallbackWidth = ServiceDiscoveryResponse.AA_WIDTH
         fallbackHeight = ServiceDiscoveryResponse.AA_HEIGHT
@@ -109,12 +116,15 @@ class AaReceiver(
         connection = conn
         val t = AapTransport(videoDecoder, context)
         t.onQuit = { clean ->
-            log("[AA] transport quit (clean=$clean, userExit=${t.wasUserExit})")
+            val userExit = t.wasUserExit
+            log("[AA] transport quit (clean=$clean, userExit=$userExit)")
             AaVideoBridge.touchSink = null
             transport = null
             try { conn.disconnect() } catch (_: Exception) {}
             connection = null
-            // Server keeps listening — AA (or the user) can reconnect.
+            // Server keeps listening — AA (or the user) can reconnect. On a genuine user Exit we
+            // notify the owner so it can fully stop the bike link instead of leaving the dash frozen.
+            try { onSessionEnded?.invoke(userExit) } catch (_: Exception) {}
         }
         transport = t
 
@@ -123,14 +133,14 @@ class AaReceiver(
         // video space and forward over the AAP INPUT channel. Dropped if the point is in a black bar.
         val input = AaInput(t, log)
         var loggedTouchMap = false
-        AaVideoBridge.touchSink = { action, cx, cy ->
+        AaVideoBridge.touchSink = { action, pointerId, cx, cy ->
             val mapped = AaVideoBridge.pipeline?.mapBikeTouchToSource(cx, cy)
             if (mapped != null) {
                 if (!loggedTouchMap || action != AaInput.ACTION_MOVE) {
-                    log("[AA] touch action=$action bike=($cx,$cy) → AA=(${mapped.first},${mapped.second})")
+                    log("[AA] touch action=$action p$pointerId bike=($cx,$cy) → AA=(${mapped.first},${mapped.second})")
                     loggedTouchMap = true
                 }
-                input.sendTouch(action, mapped.first, mapped.second)
+                input.sendTouch(action, pointerId, mapped.first, mapped.second)
             }
         }
 

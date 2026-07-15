@@ -46,6 +46,7 @@ dependencies {
     implementation(libs.jmdns)
     implementation(libs.protobuf.java)
     implementation(libs.conscrypt.android)
+    implementation(libs.osmdroid)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
