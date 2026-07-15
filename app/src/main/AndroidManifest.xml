@@ -21,6 +21,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Optional: grants a background-activity-launch exemption so the service can relaunch Google
+         Android Auto on its own after a long outage (phone in a bag, screen off) — seamless auto-resume. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />

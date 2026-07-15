@@ -32,6 +32,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var powerDesc: TextView
     private lateinit var resDesc: TextView
     private lateinit var btStatus: TextView
+    private lateinit var resumeBtn: MaterialButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +54,7 @@ class SetupActivity : AppCompatActivity() {
         powerDesc = findViewById(R.id.power_desc)
         resDesc = findViewById(R.id.res_desc)
         btStatus = findViewById(R.id.bt_status)
+        resumeBtn = findViewById(R.id.resume_perm_btn)
 
         step1Btn.setOnClickListener { openAndroidAuto() }
         step2Btn.setOnClickListener { requestMissingPermissions() }
@@ -80,6 +82,7 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.logtrips_on).setOnClickListener { setLogTrips(true) }
         findViewById<MaterialButton>(R.id.logtrips_off).setOnClickListener { setLogTrips(false) }
         findViewById<MaterialButton>(R.id.bt_settings_btn).setOnClickListener { BluetoothHelper.openBluetoothSettings(this) }
+        resumeBtn.setOnClickListener { requestOverlayPermission() }
 
         findViewById<MaterialButton>(R.id.setup_done_btn).setOnClickListener {
             markSeen(this)
@@ -208,6 +211,27 @@ class SetupActivity : AppCompatActivity() {
         step2Title.text = tick(permsOk) + " 2. Permissions"
         step2Btn.text = if (permsOk) "All granted" else "Grant permissions"
         step2Btn.isEnabled = !permsOk
+
+        val resumeOk = SetupHelper.canAutoResume(this)
+        resumeBtn.text = if (resumeOk) "\u2713 Seamless resume enabled" else "Enable seamless resume"
+        resumeBtn.isEnabled = !resumeOk
+    }
+
+    /** Deep-link to the "Display over other apps" screen for this app (overlay = seamless auto-resume). */
+    private fun requestOverlayPermission() {
+        if (SetupHelper.canAutoResume(this)) return
+        try {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.fromParts("package", packageName, null)))
+            Toast.makeText(this, "Turn on \u201cDisplay over other apps\u201d for seamless resume",
+                Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Couldn't open the overlay permission screen", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun tick(ok: Boolean): String = if (ok) "\u2713" else "\u2022"

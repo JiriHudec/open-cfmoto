@@ -320,6 +320,14 @@ class MainActivity : AppCompatActivity() {
         // First launch: walk the user through the one-time prerequisites.
         if (!SetupActivity.hasSeen(this)) SetupActivity.start(this)
         else maybeAutoConnect()
+
+        maybeResumeFromParked(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeResumeFromParked(intent)
     }
 
     override fun onResume() {
@@ -327,6 +335,28 @@ class MainActivity : AppCompatActivity() {
         // Retry auto-connect on resume: after finishing first-run setup, or once the bike's Wi-Fi
         // comes into range shortly after launch. Guarded so it only ever starts one attempt.
         if (SetupActivity.hasSeen(this)) maybeAutoConnect()
+        maybeResumeFromParked(intent)
+    }
+
+    /**
+     * Guaranteed, BAL-safe resume after the service parked Android Auto (long bike outage). Re-launching
+     * Google AA needs a foreground Activity, so when the rider taps the "Bike reconnected" notification
+     * (or just opens the app while parked and the bike looks in range) we finish the resume here — this
+     * `startActivity(gearhead)` is allowed because we're in the foreground.
+     */
+    private fun maybeResumeFromParked(intent: Intent?) {
+        val explicit = intent?.getBooleanExtra(AndroidAutoService.EXTRA_RESUME, false) == true
+        if (!explicit && !AndroidAutoService.isParked && ConnectionState.phase != Phase.WAITING_FOR_BIKE) return
+        val saved = BikeMemory.lastQr(this) ?: return
+        // On a plain open (not an explicit tap), only resume when the bike doesn't look clearly absent.
+        if (!explicit && BikeWifi.isSsidInRange(this, saved.ssid) == false) return
+        intent?.removeExtra(AndroidAutoService.EXTRA_RESUME)
+        log("→ Resuming projection to '${BikeMemory.lastBikeName(this)}' from the foreground")
+        autoConnectStarted = true
+        AndroidAutoService.notifyForegroundResuming()
+        ProjectionHolder.projection = null
+        ensureLocationPermission()
+        startAaFlow(saved)
     }
 
     /**

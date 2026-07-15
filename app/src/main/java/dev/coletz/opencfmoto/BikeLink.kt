@@ -65,4 +65,36 @@ object BikeLink {
             ConnectionState.set(Phase.ERROR, "prober start failed")
         }
     }
+
+    /**
+     * The bike's Wi-Fi came back after a drop (e.g. the rider stopped and restarted the bike). The
+     * old prober was probing a dead interface with stale IPs/server binds, so fully restart it on the
+     * fresh [network]: stop it (this only closes sockets/servers — the shared Android Auto pipeline is
+     * owned by [AndroidAutoService] and survives), then start again so it rebinds and re-probes. Called
+     * by [BikeWifi] on every re-acquisition after the first.
+     */
+    @Synchronized
+    fun onWifiReacquired(network: Network?) {
+        // If the service parked Android Auto (long outage → torn down to save battery), it must rebuild
+        // AA before the bike link is useful — hand off to the service instead of restarting the prober
+        // against a dead (stopped) pipeline.
+        if (AndroidAutoService.isParked) {
+            LogBus.log("→ Wi-Fi back while AA parked — asking service to resume")
+            AndroidAutoService.requestResume()
+            return
+        }
+        val p = prober ?: return
+        LogBus.log("→ restarting bike link on re-acquired Wi-Fi")
+        ConnectionState.set(Phase.PXC_CONNECTING, "reconnecting")
+        try { p.stop() } catch (_: Exception) {}
+        bikeNetwork = network
+        networkReady = true
+        proberStarted = true
+        try {
+            p.start(network)
+        } catch (e: Exception) {
+            LogBus.log("prober restart failed: $e")
+            ConnectionState.set(Phase.ERROR, "prober restart failed")
+        }
+    }
 }

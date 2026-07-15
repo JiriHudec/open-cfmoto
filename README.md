@@ -44,6 +44,7 @@ dash touchscreen.
 | 📐 **Smart resolution & orientation** | Auto-fits recognized dashes and learns unknown ones; manual landscape/portrait + SD/HD overrides. |
 | 🔋 **Battery & power tuning** | Frame-rate caps (Smooth / Balanced / Saver) to reduce heat and drain during long rides. |
 | 🛟 **Auto-recovery watchdog** | Detects a stalled or dropped dash and reconnects automatically — no Stop/Start. |
+| 🔄 **Seamless resume** | Stop the bike for a bit? Projection parks to save battery, watches for the bike, and re-projects on its own when it's back — screen off, phone stowed. |
 | 📱 **Whole-screen mirroring** | Optional: mirror your entire phone to the dash instead of Android Auto. |
 | 🧰 **In-app diagnostics** | Live log panel with one-tap share for troubleshooting. |
 
@@ -174,7 +175,32 @@ This app runs a live video transcoder, so it always draws power and warms the ph
   on the bike's USB charger and turn its screen **off** while riding (projection keeps running).
 - **Auto-connect on launch** — start projecting automatically when a paired bike's Wi‑Fi is in range.
 - **Auto-recovery watchdog** — if the dash drops or the stream stalls, reconnect automatically.
+- **Seamless resume** — see below.
 - **Log trips automatically** — record every ride's route + stats while projecting.
+
+<br clear="all"/>
+
+### 🔄 Seamless resume (stop-and-go rides)
+
+Stopped for fuel, a coffee, or a quick photo? When the bike's Wi‑Fi drops, the app keeps Android Auto
+alive for a ~1 minute grace window (so brief blips resume instantly). If the bike stays off longer, it
+**parks** the projection — tearing down the video transcode so the phone stops heating and draining —
+and quietly watches for the bike's Wi‑Fi to come back. When it does, it **re-projects Android Auto and
+maps automatically**. It keeps watching until you tap **Stop**, and it's gated behind the *Auto-recovery*
+setting.
+
+**For fully hands-free resume with the phone in a bag or the screen off**, enable one extra permission:
+
+> **Setup ▸ Startup & recovery ▸ Seamless auto-resume ▸ “Enable seamless resume”** → turn on
+> **Display over other apps** for OpenCfMoto.
+
+Android blocks apps from relaunching Android Auto from the background unless they hold this permission.
+- **Granted:** the app resumes projection entirely on its own — no touch needed, even locked/stowed.
+- **Not granted:** everything still works, but resume ends with a **“Bike reconnected — tap to resume”**
+  notification; one tap re-projects.
+
+The permission is optional and off by default. Recommended if you keep your phone pocketed or in a
+backpack while riding.
 
 <br clear="all"/>
 
@@ -230,6 +256,7 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | **Auto-connect doesn't fire** | Ensure *Auto-connect* is On, the bike is paired, and its Wi‑Fi is in range; open the app or return to it to retry. |
 | Picture is **stretched / letterboxed** on an unknown bike | Reconnect once so it learns the dash shape, or set the orientation/size manually in Setup. |
 | Dash **froze** and didn't recover | With *Auto-recovery* on it should reconnect itself; otherwise tap **Stop** then **Connect**. |
+| **Didn't resume on its own** after a long stop | Enable **Seamless resume** (Setup ▸ Startup & recovery → *Display over other apps*) so the app can re-project with the screen off; otherwise tap the **“Bike reconnected”** notification. |
 
 **Getting help:** reproduce the issue, then tap **Logs ▸ Share** and send the log file — it describes
 each step and makes problems diagnosable.

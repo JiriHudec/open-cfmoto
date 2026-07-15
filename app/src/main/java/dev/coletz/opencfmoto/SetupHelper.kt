@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 
 /**
@@ -42,6 +43,14 @@ object SetupHelper {
     }
 
     fun permissionsGranted(ctx: Context): Boolean = missingPermissions(ctx).isEmpty()
+
+    /**
+     * "Display over other apps" (overlay) is granted. Not required for normal use, but it exempts the
+     * app from Android's background-activity-launch limits, so [AndroidAutoService] can relaunch Google
+     * Android Auto by itself after a long outage — a fully seamless auto-resume with the phone stowed.
+     * Without it, resume falls back to a tap-to-resume notification.
+     */
+    fun canAutoResume(ctx: Context): Boolean = Settings.canDrawOverlays(ctx)
 
     /** Everything we can verify is in place. Head-unit mode can't be verified, so it isn't gated. */
     fun coreReady(ctx: Context): Boolean =

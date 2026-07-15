@@ -8,6 +8,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 
 /**
@@ -15,17 +17,46 @@ import android.os.SystemClock
  *
  * The system shows a dialog asking the user to accept the network. After acceptance, the
  * resulting Network object is process-bound so our TCP sockets and mDNS lookups go through
- * the bike's interface (which has no internet — that's fine).
+ * the bike's interface (which has no internet — that's fine). Once the SSID has been approved,
+ * Android re-satisfies the request without prompting again, so re-joins are silent.
  *
- * QR for this bike:
- *   ssid = CFMOTO-f46457
- *   pwd  = 59a9cddc94
- *   auth = wpa2-psk
+ * ## Auto-rejoin on loss (bike power-cycle)
+ * A [WifiNetworkSpecifier] request is *terminal* on loss: when the bike is switched off its hotspot
+ * disappears and the framework won't re-satisfy the old request on its own. So if the network drops
+ * while a session is still active, we re-issue the request (with backoff) until the bike's AP comes
+ * back. The FIRST acquisition drives the normal start-up; every subsequent one is a re-acquire that
+ * restarts the bike link on the fresh network via [BikeLink.onWifiReacquired] (fresh IP + rebound
+ * server sockets + fresh probe). Without this, stopping and restarting the bike left the app probing
+ * a dead interface and needed several manual Stop→Connect cycles to recover.
  */
 object BikeWifi {
+    private var cm: ConnectivityManager? = null
     private var callback: ConnectivityManager.NetworkCallback? = null
+    private var request: NetworkRequest? = null
+    private val handler = Handler(Looper.getMainLooper())
+
     var currentNetwork: Network? = null
         private set
+
+    @Volatile private var active = false
+    @Volatile private var firstDelivered = false
+    private var rejoinAttempts = 0
+    private var ssid: String = ""
+    private var onAvailableCb: ((Network) -> Unit)? = null
+    private var onLostCb: (() -> Unit)? = null
+    private var logCb: ((String) -> Unit)? = null
+
+    // Watch for the bike's AP until the rider taps Stop (leave()): a stopped bike may be off for a
+    // while, and re-issuing the (approved, silent) request is cheap. Backoff grows then caps so we
+    // don't hammer the framework while parked.
+    //
+    // The FIRST re-request after a drop is near-instant: at home the phone races to re-join a saved
+    // network the moment the bike's AP blips, and if we don't re-grab the bike AP fast the dash's
+    // EasyConn times out ("device is not on the network") and needs a manual restart. Grabbing it back
+    // immediately keeps us on the bike's network long enough for the dash to reconnect on its own.
+    private const val REJOIN_FAST_MS = 300L
+    private const val REJOIN_BASE_MS = 2500L
+    private const val REJOIN_MAX_MS = 15000L
 
     fun join(
         context: Context,
@@ -35,42 +66,86 @@ object BikeWifi {
         onLost: () -> Unit,
         log: (String) -> Unit,
     ) {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        callback?.let {            try { cm.unregisterNetworkCallback(it) } catch (_: Exception) {}
-        }
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        // Tear down any previous session's callback first.
+        handler.removeCallbacksAndMessages(null)
+        callback?.let { try { cm.unregisterNetworkCallback(it) } catch (_: Exception) {} }
+
+        this.cm = cm
+        this.ssid = ssid
+        this.onAvailableCb = onAvailable
+        this.onLostCb = onLost
+        this.logCb = log
+        this.active = true
+        this.firstDelivered = false
+        this.rejoinAttempts = 0
 
         val specifier = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
             .setWpa2Passphrase(psk)
             .build()
-
-        val request = NetworkRequest.Builder()
+        request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .setNetworkSpecifier(specifier)
             .build()
 
+        log("requesting Wi-Fi join: $ssid …")
+        registerCallback()
+    }
+
+    private fun registerCallback() {
+        val cm = cm ?: return
+        val req = request ?: return
+        callback?.let { try { cm.unregisterNetworkCallback(it) } catch (_: Exception) {} }
+
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 currentNetwork = network
                 cm.bindProcessToNetwork(network)
-                log("Wi-Fi joined: $ssid (network=$network, bound)")
-                onAvailable(network)
+                rejoinAttempts = 0
+                if (!firstDelivered) {
+                    firstDelivered = true
+                    logCb?.invoke("Wi-Fi joined: $ssid (network=$network, bound)")
+                    onAvailableCb?.invoke(network)
+                } else {
+                    logCb?.invoke("Wi-Fi re-acquired: $ssid — restarting bike link on fresh network")
+                    BikeLink.onWifiReacquired(network)
+                }
             }
 
             override fun onLost(network: Network) {
-                log("Wi-Fi lost: $network")
+                logCb?.invoke("Wi-Fi lost: $network")
                 currentNetwork = null
-                onLost()
+                onLostCb?.invoke()
+                if (active) scheduleRejoin()
             }
 
             override fun onUnavailable() {
-                log("Wi-Fi join unavailable (user declined or out of range)")
+                logCb?.invoke("Wi-Fi join unavailable (bike off / out of range / declined)")
+                if (active) scheduleRejoin()
             }
         }
         callback = cb
-        log("requesting Wi-Fi join: $ssid …")
-        cm.requestNetwork(request, cb)
+        cm.requestNetwork(req, cb)
+    }
+
+    private fun scheduleRejoin() {
+        if (!active) return
+        rejoinAttempts++
+        // First attempt is near-instant to beat the phone settling on a saved (home) network and the
+        // dash timing out; later attempts back off and cap so we don't hammer the framework.
+        val delay = if (rejoinAttempts <= 1) REJOIN_FAST_MS
+        else minOf(REJOIN_BASE_MS * (rejoinAttempts - 1), REJOIN_MAX_MS)
+        handler.postDelayed({
+            if (!active) return@postDelayed
+            logCb?.invoke("re-requesting bike Wi-Fi (attempt $rejoinAttempts) …")
+            // Don't stomp the WAITING_FOR_BIKE state the service sets once AA is parked.
+            if (ConnectionState.phase != Phase.WAITING_FOR_BIKE) {
+                ConnectionState.set(Phase.RECONNECTING, "waiting for bike Wi-Fi")
+            }
+            registerCallback()
+        }, delay)
     }
 
     /**
@@ -115,11 +190,14 @@ object BikeWifi {
     private const val FRESH_SCAN_US = 30_000_000L  // 30s
 
     fun leave(context: Context, log: (String) -> Unit) {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        active = false
+        handler.removeCallbacksAndMessages(null)
+        val cm = this.cm ?: (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
         callback?.let {
             try { cm.unregisterNetworkCallback(it) } catch (_: Exception) {}
         }
         callback = null
+        firstDelivered = false
         cm.bindProcessToNetwork(null)
         currentNetwork = null
         log("Wi-Fi released")

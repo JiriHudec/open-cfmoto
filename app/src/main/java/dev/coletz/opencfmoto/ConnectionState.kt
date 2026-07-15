@@ -17,6 +17,7 @@ enum class Phase(val label: String, val busy: Boolean) {
     STREAMING("Connected — projecting to dash", false),
     MIRRORING("Mirroring screen to dash", false),
     RECONNECTING("Link dropped — reconnecting…", true),
+    WAITING_FOR_BIKE("Bike out of range — waiting…", true),
     STOPPED("Stopped", false),
     ERROR("Error — see logs", false),
 }
