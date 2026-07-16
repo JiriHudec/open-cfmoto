@@ -254,6 +254,18 @@
                     android:textSize="12sp"
                     android:letterSpacing="0.08" />
 
+                <TextView
+                    android:id="@+id/tv_touch_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:padding="10dp"
+                    android:background="@drawable/hint_pill"
+                    android:text="Your dash is a touchscreen — just tap the screen to navigate. Handlebar-button control is meant for non-touch dashes (e.g. 450SR); on this bike it can't move the menu and only pauses your music."
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switch_control_aa"
                     android:layout_width="match_parent"

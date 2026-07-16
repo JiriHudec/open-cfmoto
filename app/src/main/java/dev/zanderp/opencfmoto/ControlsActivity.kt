@@ -62,6 +62,21 @@ class ControlsActivity : AppCompatActivity() {
             key(AaInput.KEY_ASSISTANT)
         }
 
+        // Touchscreen dashes (800MT, 1000 MT-X) run Android Auto's touch UI, which has no focus
+        // cursor for a rotary knob to move — so handlebar-button navigation can't work there and only
+        // costs the rider their music. Warn, and let them just tap the dash. The live profile is
+        // authoritative once connected; otherwise fall back to what the last connect remembered.
+        val live = BikeProfileHolder.active
+        val touchDash: Boolean? = if (live !== BikeProfiles.legacy) {
+            DashMemory.setLastDashTouch(this, live.supportsScreenTouch)
+            live.supportsScreenTouch
+        } else {
+            DashMemory.lastDashTouch(this)
+        }
+        if (touchDash == true) {
+            findViewById<View>(R.id.tv_touch_hint).visibility = View.VISIBLE
+        }
+
         // Handlebar-button mode toggle (live-applied if the bridge is running).
         val sw = findViewById<MaterialSwitch>(R.id.switch_control_aa)
         sw.isChecked = ButtonMode.isControlAa(this)

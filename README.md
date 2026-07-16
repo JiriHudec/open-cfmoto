@@ -80,6 +80,47 @@ No root, no VPN, no PC required to ride.
 
 ---
 
+## 🏍️ Supported bikes
+
+OpenCfMoto speaks the **CFMoto MotoPlay** protocol — the same phone-projection system the official
+**CFMOTO RIDE** app uses. Any bike with a MotoPlay-capable dash is a candidate: generally **2024+**
+models fitted with a **T‑BOX**. Some need a one-time **dash OTA update** (triggered from the CFMOTO
+RIDE app) before MotoPlay appears.
+
+<p>
+<img src="docs/screenshots/12_supported_bikes.png" width="240" alt="In-app supported bikes list"/>
+</p>
+
+**✅ Confirmed working with OpenCfMoto**
+
+- **800MT** (MT‑X / Explore) — landscape touchscreen (CFDL26)
+- **1000 MT‑X** — portrait touchscreen (CFDL26)
+- **450SR** — non‑touch dash (CFDL16); driven with the handlebar buttons + on-screen pad
+
+**🧪 MotoPlay-equipped — should work (untested; reports welcome)**
+
+| Family | Models |
+| --- | --- |
+| **Naked (NK)** | 125NK · 450NK · 675NK · 800NK (Advanced / Sport) |
+| **Sport (SR)** | 450SR (2024+) · 450SR‑S · 450SR TC · 675SR‑R |
+| **Touring / Adventure (MT)** | 450MT · 700MT · 700MT Adventure · 800MT‑X · 800MT Explore · 800MT Explore GT |
+| **Cruiser (CL)** | 450CL‑C |
+| **ATV / SSV (TFT dash)** | CFORCE 800 (2024+) · CFORCE 1000 (2024+) |
+
+**🚫 Not MotoPlay-equipped** (per CFMoto): 800MT Sport, 800MT Touring, 450SR World Champion Edition,
+700CL‑X (Adventure / Heritage / Sport).
+
+> **Availability varies by model year and region.** Quickest check: if **MotoPlay** shows up as a
+> subscription option in the official **CFMOTO RIDE** app for your bike, the dash speaks the protocol
+> OpenCfMoto uses. **Touch** dashes are driven with the screen; **non‑touch** dashes with the
+> handlebar buttons + on-screen pad. Tried a bike that isn't listed as confirmed?
+> Tell us in **[Discord](https://discord.gg/xRt5yZy2U)** so we can add it.
+
+Sources: CFMoto RIDE app model availability tables ([CFMOTO Benelux](https://cfmotobenelux.com/en/cfmoto-ride-app/),
+[CFMOTO Canada](https://cfmoto.ca/en/cfmoto-ride-app)) and the CFMoto RIDE / MotoPlay OTA rollout notes.
+
+---
+
 ## 🚀 Getting started
 
 ### 1. Prepare the bike
@@ -228,16 +269,28 @@ Touchscreen dashes (800MT, 1000 MT‑X) are driven by touch. **Non-touch dashes*
 bikes — 450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) are driven by the **handlebar buttons**
 and an **on-screen pad** instead. Open **Controls & handlebar buttons** from the main screen.
 
+<p>
+<img src="docs/screenshots/10_controls.png" width="220" alt="Controls — on-screen pad + handlebar toggle"/>&nbsp;
+<img src="docs/screenshots/11_button_mapping.png" width="220" alt="Handlebar button mapping"/>
+</p>
+
+<br clear="all"/>
+
 **Handlebar buttons → Android Auto.** The buttons reach the phone over **Bluetooth** (AVRCP) — *not*
 the mirroring link — so you must **pair the phone to the bike over Bluetooth** first. Turn on
 *Handlebar buttons drive Android Auto* and the defaults are:
 
-| Gesture | Default action |
+| Gesture (button) | Default action |
 | --- | --- |
-| **▲ / ▼ press** | Rotary knob — step through the current list |
-| **Enter** | Select / OK |
-| **▼▼ (double down)** | Back |
-| **▲▲ (double up)** | Home (app list) |
+| **Backward** — ◀ left, or ▲ volume on non-touch dashes | Rotary knob back (previous item) |
+| **Forward** — ▶ right, or ▼ volume on non-touch dashes | Rotary knob forward (next item) |
+| **Select** — Enter / ★ (start) button | Select / OK |
+| **Backward ×2** (double-tap, non-touch dashes) | Home (app list) |
+| **Forward ×2** (double-tap, non-touch dashes) | Back |
+
+The mapping is by **meaning, not by physical button**: the app auto-routes whatever your bike
+sends — the 450SR's ▲/▼ volume, or the 800MT's ◀/▶ track keys — into the same Backward / Forward /
+Select gestures, so one setup works across bikes.
 
 Every gesture is **remappable** in **Customize buttons** (knob, D-pad, select, back, home, Assistant,
 do-nothing, or *navigate to a saved place*). While the mode is on, the buttons stop skipping music

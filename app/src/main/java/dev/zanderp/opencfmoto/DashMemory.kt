@@ -14,9 +14,25 @@ import android.content.Context
 object DashMemory {
     private const val PREFS = "opencfmoto_bike"
     private const val KEY_PREFIX = "dash_geo_"
+    private const val KEY_LAST_TOUCH = "last_dash_touch"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /**
+     * Remember whether the last dash we connected to is a touchscreen. Lets the Controls screen warn
+     * that handlebar-button navigation is pointless on a touch dash (Android Auto runs its touch UI,
+     * which has no focus cursor for the rotary knob to move) even before this session connects.
+     */
+    fun setLastDashTouch(ctx: Context, touch: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_LAST_TOUCH, touch).apply()
+    }
+
+    /** Whether the last connected dash was a touchscreen, or null if we've never connected. */
+    fun lastDashTouch(ctx: Context): Boolean? {
+        val p = prefs(ctx)
+        return if (p.contains(KEY_LAST_TOUCH)) p.getBoolean(KEY_LAST_TOUCH, false) else null
+    }
 
     /** Record the dash's requested canvas for [ssid] (ignored if degenerate). */
     fun observe(ctx: Context, ssid: String?, w: Int, h: Int) {

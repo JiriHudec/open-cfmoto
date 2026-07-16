@@ -87,6 +87,7 @@ class MainActivity : AppCompatActivity() {
      *  which must be set before AA starts. CLIENT_INFO refines it later during the PXC handshake. */
     private fun applyProfile(qr: QrData) {
         BikeProfileHolder.active = BikeProfiles.selectByQr(qr)
+        DashMemory.setLastDashTouch(this, BikeProfileHolder.active.supportsScreenTouch)
         val userOverride = VideoPrefs.resolutionOverride(this, BikeProfileHolder.active)
         // In AUTO mode, if a previous session revealed this dash is a different orientation than the
         // profile assumes, flip AA to match. Learned from the dash's REQ_CONFIG_CAPTURE (see DashMemory).

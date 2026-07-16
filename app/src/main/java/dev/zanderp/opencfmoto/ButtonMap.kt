@@ -40,13 +40,19 @@ enum class ButtonAction(val id: String, val label: String) {
 }
 
 /**
- * The gestures a CFMoto dash can actually produce **and that Android Auto acts on** over Bluetooth
- * AVRCP:
- *   • a short press of ▲/▼ → an absolute-volume write (direction = which button)
- *   • a double tap of ▲/▼ → ONE absolute-volume write with a bigger jump (the dash coalesces them)
- *   • enter → an AVRCP play/pause passthrough
+ * The **semantic** gestures a CFMoto handlebar can produce, regardless of which physical buttons a
+ * given bike uses. Different dashes send navigation on different buttons, but they all collapse to a
+ * "previous / next / select" trio, so we map by meaning and let [MediaButtonBridge] route whatever
+ * the bike sends into the matching gesture — no per-bike layout config needed:
+ *   • **Backward / Forward** — the CFDL16 dashes (450SR etc.) send these as ▲/▼ *volume* writes;
+ *     the 800MT's 5-way sends them as ◀/▶ *previous-/next-track*. Either way ◀/▲ = backward and
+ *     ▶/▼ = forward.
+ *   • **Backward/Forward ×2** — a double-tap. Only the volume dashes can signal it (one coalesced
+ *     volume write with a bigger jump); the 800MT's discrete track keys just repeat the single step,
+ *     so these rows are effectively non-touch-dash only.
+ *   • **Select** — the OK / ★ (start) button, which every dash sends as an AVRCP play/pause.
  *
- * [label] describes the physical gesture; [hint] says what the dash actually sends.
+ * [label] is the semantic name (with the physical buttons that trigger it); [hint] explains it.
  */
 enum class ButtonGesture(
     val id: String,
@@ -54,11 +60,11 @@ enum class ButtonGesture(
     val hint: String,
     val default: ButtonAction,
 ) {
-    VOL_UP_PRESS("volUpPress", "▲ press", "dash sends volume up", ButtonAction.KNOB_BACK),
-    VOL_UP_DOUBLE("volUpDouble", "▲ double tap", "one big volume jump up", ButtonAction.HOME),
-    VOL_DOWN_PRESS("volDownPress", "▼ press", "dash sends volume down", ButtonAction.KNOB_FORWARD),
-    VOL_DOWN_DOUBLE("volDownDouble", "▼ double tap", "one big volume jump down", ButtonAction.BACK),
-    ENTER_PRESS("enterPress", "Enter", "dash sends play/pause", ButtonAction.SELECT),
+    NAV_BACK("navBack", "Backward  ◀ / ▲", "◀ left, or the ▲ volume press on non-touch dashes", ButtonAction.KNOB_BACK),
+    NAV_FWD("navFwd", "Forward  ▶ / ▼", "▶ right, or the ▼ volume press on non-touch dashes", ButtonAction.KNOB_FORWARD),
+    SELECT_PRESS("selectPress", "Select  Enter / ★", "the OK / ★ start button (dash sends play-pause)", ButtonAction.SELECT),
+    NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward — non-touch dashes only", ButtonAction.HOME),
+    NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward — non-touch dashes only", ButtonAction.BACK),
 }
 
 /**

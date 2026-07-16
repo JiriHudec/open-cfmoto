@@ -192,7 +192,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             session?.setMetadata(
                 MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, "Android Auto control")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "Hold ▲/▼ to navigate · OK to select")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ / ▲ ▼ navigate · Enter selects")
                     .putString(MediaMetadata.METADATA_KEY_ALBUM, "OpenCfMoto")
                     .putLong(MediaMetadata.METADATA_KEY_DURATION, TRACK_MS)
                     .build()
@@ -328,11 +328,13 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
                 try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0) } catch (_: Exception) {}
 
                 val double = kotlin.math.abs(jump) >= DOUBLE_TAP_STEPS
+                // Volume UP = backward (previous item), DOWN = forward (next item) — same semantics as
+                // the 800MT's ◀/▶ track keys, so both layouts drive the same gestures.
                 val gesture = when {
-                    up && double -> ButtonGesture.VOL_UP_DOUBLE
-                    up -> ButtonGesture.VOL_UP_PRESS
-                    double -> ButtonGesture.VOL_DOWN_DOUBLE
-                    else -> ButtonGesture.VOL_DOWN_PRESS
+                    up && double -> ButtonGesture.NAV_BACK_DOUBLE
+                    up -> ButtonGesture.NAV_BACK
+                    double -> ButtonGesture.NAV_FWD_DOUBLE
+                    else -> ButtonGesture.NAV_FWD
                 }
                 log("[BTN] volume $dir ($pinnedVolume→$now, jump=$jump)${if (double) " ×2" else ""}")
                 run(gesture)
@@ -402,20 +404,28 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             return true
         }
         // Fallbacks: the bike takes the raw-key path above; other dashes / BT remotes may dispatch here.
-        override fun onPlay() = run(ButtonGesture.ENTER_PRESS)
-        override fun onPause() = run(ButtonGesture.ENTER_PRESS)
+        override fun onPlay() = run(ButtonGesture.SELECT_PRESS)
+        override fun onPause() = run(ButtonGesture.SELECT_PRESS)
     }
 
     /**
-     * Map a raw media keycode to a gesture. Only enter (play/pause toggle) is acted on; everything
-     * else the dash can send here is logged and dropped (aliasing an unused key onto another
-     * gesture's action would be a nasty surprise when that gesture is "navigate home").
+     * Map a raw media keycode to a gesture:
+     *   • play/pause → enter (select) — every dash sends this on the enter/OK button.
+     *   • next-/previous-track → the ▶/◀ presses of the 800MT's 5-way joystick (verified on hardware:
+     *     right = KEYCODE_MEDIA_NEXT, left = KEYCODE_MEDIA_PREVIOUS). The 3-button CFDL16 dashes never
+     *     emit these, so wiring them up is harmless there.
+     * Anything else is logged and dropped — aliasing an unknown key onto a real action would be a
+     * nasty surprise when that action is "navigate home".
      */
     private fun forward(keyCode: Int) {
         when (keyCode) {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_MEDIA_PLAY,
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> run(ButtonGesture.ENTER_PRESS)
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> run(ButtonGesture.SELECT_PRESS)
+            KeyEvent.KEYCODE_MEDIA_NEXT,
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> run(ButtonGesture.NAV_FWD)
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_MEDIA_REWIND -> run(ButtonGesture.NAV_BACK)
         }
     }
 
