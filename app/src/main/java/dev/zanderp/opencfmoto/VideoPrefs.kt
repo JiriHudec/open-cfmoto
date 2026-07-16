@@ -61,6 +61,12 @@ enum class ResolutionMode(val label: String, val spec: AaVideoSpec?) {
     PORTRAIT_HD("Portrait · 1080×1920 (HD)", AaVideoSpec(AaResolution.PORTRAIT_1080x1920, dpi = 240)),
 }
 
+/**
+ * Video/projection preferences. Each setting is **per bike** (scoped via [BikeScope] to the selected
+ * bike in the garage): a portrait 1000 MT-X can keep Fit + portrait HD while a landscape 800MT keeps
+ * Fill + SD, and switching the active bike switches its settings. When no bike is selected — or a bike
+ * has never been customized — the previous single, global value is used as the default.
+ */
 object VideoPrefs {
     private const val PREFS = "opencfmoto_bike"
     private const val KEY_QUALITY = "video_quality"
@@ -68,16 +74,16 @@ object VideoPrefs {
     private const val KEY_POWER = "power_mode"
     private const val KEY_RESOLUTION = "resolution_mode"
 
+    private fun prefs(ctx: Context) =
+        ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
     fun get(ctx: Context): VideoQuality {
-        val name = ctx.applicationContext
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_QUALITY, VideoQuality.BALANCED.name)
+        val name = BikeScope.getString(prefs(ctx), ctx, KEY_QUALITY, VideoQuality.BALANCED.name)
         return runCatching { VideoQuality.valueOf(name!!) }.getOrDefault(VideoQuality.BALANCED)
     }
 
     fun set(ctx: Context, quality: VideoQuality) {
-        ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_QUALITY, quality.name).apply()
+        BikeScope.putString(prefs(ctx), ctx, KEY_QUALITY, quality.name)
     }
 
     /** Effective bitrate for [profile] under the current quality preference. */
@@ -85,39 +91,30 @@ object VideoPrefs {
         (profile.videoBitrate * get(ctx).multiplier).toInt()
 
     fun fit(ctx: Context): ScreenFit {
-        val name = ctx.applicationContext
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_FIT, ScreenFit.FILL.name)
+        val name = BikeScope.getString(prefs(ctx), ctx, KEY_FIT, ScreenFit.FILL.name)
         return runCatching { ScreenFit.valueOf(name!!) }.getOrDefault(ScreenFit.FILL)
     }
 
     fun setFit(ctx: Context, fit: ScreenFit) {
-        ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_FIT, fit.name).apply()
+        BikeScope.putString(prefs(ctx), ctx, KEY_FIT, fit.name)
     }
 
     fun power(ctx: Context): PowerMode {
-        val name = ctx.applicationContext
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_POWER, PowerMode.BALANCED.name)
+        val name = BikeScope.getString(prefs(ctx), ctx, KEY_POWER, PowerMode.BALANCED.name)
         return runCatching { PowerMode.valueOf(name!!) }.getOrDefault(PowerMode.BALANCED)
     }
 
     fun setPower(ctx: Context, mode: PowerMode) {
-        ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_POWER, mode.name).apply()
+        BikeScope.putString(prefs(ctx), ctx, KEY_POWER, mode.name)
     }
 
     fun resolution(ctx: Context): ResolutionMode {
-        val name = ctx.applicationContext
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_RESOLUTION, ResolutionMode.AUTO.name)
+        val name = BikeScope.getString(prefs(ctx), ctx, KEY_RESOLUTION, ResolutionMode.AUTO.name)
         return runCatching { ResolutionMode.valueOf(name!!) }.getOrDefault(ResolutionMode.AUTO)
     }
 
     fun setResolution(ctx: Context, mode: ResolutionMode) {
-        ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_RESOLUTION, mode.name).apply()
+        BikeScope.putString(prefs(ctx), ctx, KEY_RESOLUTION, mode.name)
     }
 
     /**

@@ -144,7 +144,16 @@ internal class AapControlSensor(private val aapTransport: AapTransport) : AapCon
             )
         )
         aapTransport.startSensor(request.type.number)
+        // Once AA starts the NIGHT sensor, immediately report the current day/night so Maps picks the
+        // right map theme from the first frame (and later toggles go through AapTransport.sendNightMode).
+        if (request.type.number == SENSOR_NIGHT) {
+            aapTransport.send(NightModeEvent(aapTransport.nightMode))
+        }
         return 0
+    }
+
+    private companion object {
+        const val SENSOR_NIGHT = 10
     }
 }
 

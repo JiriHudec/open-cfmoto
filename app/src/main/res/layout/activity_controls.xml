@@ -80,6 +80,73 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- ===== Map theme ===== -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Card.OpenCfMoto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Map theme"
+                    android:textColor="@color/text_secondary"
+                    android:textAllCaps="true"
+                    android:textSize="12sp"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:id="@+id/theme_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Auto switches the dash map to dark at night and light by day. Applies instantly while projecting."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/theme_auto"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:text="Auto" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/theme_day"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
+                        android:layout_weight="1"
+                        android:text="Day" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/theme_night"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1"
+                        android:text="Night" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- ===== On-screen pad ===== -->
         <com.google.android.material.card.MaterialCardView
             style="@style/Card.OpenCfMoto"

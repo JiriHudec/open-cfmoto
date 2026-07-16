@@ -24,6 +24,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Best-effort close of the official CFMoto/EasyConnect app when it's holding the bike's
+         mirroring-link ports (10920-10922) and blocking our connection. Only ever targets that one
+         package; the reliable fallback is opening its App-info screen for a manual Force stop. -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!-- Optional: grants a background-activity-launch exemption so the service can relaunch Google
          Android Auto on its own after a long outage (phone in a bag, screen off) — seamless auto-resume. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -35,6 +39,8 @@
     <queries>
         <package android:name="com.google.android.projection.gearhead" />
         <package android:name="com.google.android.gms" />
+        <!-- So we can detect + best-effort close the official CFMoto app when it grabs the link ports. -->
+        <package android:name="com.cfmoto.cfmotointernational" />
     </queries>
 
     <application
@@ -70,6 +76,9 @@
             android:exported="false" />
         <activity
             android:name=".TripMapActivity"
+            android:exported="false" />
+        <activity
+            android:name=".GarageActivity"
             android:exported="false" />
         <activity
             android:name=".ControlsActivity"

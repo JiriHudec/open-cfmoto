@@ -51,4 +51,11 @@ object AaVideoBridge {
      * session is active.
      */
     @Volatile var scrollSink: ((delta: Int) -> Unit)? = null
+
+    /**
+     * Map day/night → Android Auto bridge. The UI (Dash view / Controls) calls this with the desired
+     * night state; the live AA session ([AaReceiver]) forwards it as the head unit's NIGHT sensor so
+     * Maps/Waze switch their map theme. Null when no AA session is active.
+     */
+    @Volatile var nightSink: ((isNight: Boolean) -> Unit)? = null
 }

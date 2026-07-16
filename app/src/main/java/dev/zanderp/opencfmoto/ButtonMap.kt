@@ -75,14 +75,16 @@ object ButtonMap {
     private const val PREF = "button_map"
 
     fun get(context: Context, gesture: ButtonGesture): ButtonAction =
-        ButtonAction.byId(prefs(context).getString(gesture.id, null)) ?: gesture.default
+        ButtonAction.byId(BikeScope.getString(prefs(context), context, gesture.id, null)) ?: gesture.default
 
     fun set(context: Context, gesture: ButtonGesture, action: ButtonAction) {
-        prefs(context).edit().putString(gesture.id, action.id).apply()
+        BikeScope.putString(prefs(context), context, gesture.id, action.id)
     }
 
+    /** Reset the **selected bike's** mapping to defaults (other bikes keep theirs). */
     fun resetAll(context: Context) {
-        prefs(context).edit().clear().apply()
+        val p = prefs(context)
+        for (g in ButtonGesture.entries) BikeScope.remove(p, context, g.id)
     }
 
     /** True when every gesture is still on its default — used to enable/disable the reset button. */

@@ -77,11 +77,23 @@ class PxcHandshake(
 
         profile = BikeProfiles.select(json, log)
         val early = BikeProfileHolder.active
+        val startedSpec = BikeProfileHolder.aaVideo  // what Android Auto actually started / negotiated with
         if (early !== profile) {
             log("[$tag] profile refined from QR guess '${early.name}' → CLIENT_INFO '${profile.name}' " +
                 "(AA already started at the QR-guess resolution)")
         }
         BikeProfileHolder.active = profile  // authoritative; QR modelId was only the early hint
+        // Android Auto's video surface + decoder buffer were sized when AA started (from the QR guess)
+        // and CANNOT be resized mid-session. If the refined profile wants a different resolution and no
+        // explicit override is in effect, pin the spec to what AA is really running: otherwise the
+        // compositor scales the live source (e.g. 800x480) as if it were the profile's (e.g. 720x1280),
+        // producing a wildly wrong draw rect and a picture the dash rejects — which drops the link every
+        // few seconds (the connect/drop flap). Known/consistent bikes hit no-op here.
+        if (BikeProfileHolder.aaVideoOverride == null && BikeProfileHolder.aaVideo != startedSpec) {
+            BikeProfileHolder.aaVideoOverride = startedSpec
+            log("[$tag] pinned AA video to ${startedSpec.width}x${startedSpec.height} " +
+                "(can't resize mid-session; refined profile wanted ${profile.aaVideo.width}x${profile.aaVideo.height})")
+        }
         log("[$tag] *** BikeProfile selected: ${profile.name} ***")
 
         val reply = profile.buildClientInfoReply(json, carHuid, phoneUuid)

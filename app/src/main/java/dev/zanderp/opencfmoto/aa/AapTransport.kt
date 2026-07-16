@@ -75,6 +75,20 @@ class AapTransport(
 
     internal fun startSensor(type: Int) { startedSensors.add(type) }
 
+    /** The last night value we reported (also the value sent when AA starts the NIGHT sensor). */
+    @Volatile var nightMode: Boolean = false
+
+    /**
+     * Report day/night to Android Auto so Maps switches its map theme. No-op until AA has actually
+     * started the NIGHT sensor (it requests it during channel setup); [AapControlSensor] sends the
+     * initial value at that point, and this handles later toggles.
+     */
+    fun sendNightMode(isNight: Boolean) {
+        nightMode = isNight
+        if (!startedSensors.contains(SENSOR_NIGHT)) return
+        send(NightModeEvent(isNight))
+    }
+
     private fun sendEncryptedMessage(data: ByteArray, length: Int): Int {
         val ba = ssl.encrypt(AapMessage.HEADER_SIZE, length - AapMessage.HEADER_SIZE, data) ?: return -1
         ba.data[0] = data[0]
@@ -245,5 +259,7 @@ class AapTransport(
         private const val MSG_POLL = 1
         private const val MSG_SEND = 2
         private const val HANDSHAKE_TIMEOUT_MS = 10_000L
+        /** Sensors.SensorType.NIGHT value (see proto). */
+        private const val SENSOR_NIGHT = 10
     }
 }

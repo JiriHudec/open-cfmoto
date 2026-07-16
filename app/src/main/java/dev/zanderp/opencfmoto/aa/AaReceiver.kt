@@ -8,6 +8,7 @@ package dev.zanderp.opencfmoto.aa
 
 import android.content.Context
 import dev.zanderp.opencfmoto.AaVideoBridge
+import dev.zanderp.opencfmoto.NightPrefs
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.view.Surface
@@ -76,12 +77,33 @@ class AaReceiver(
         // foreground, via AaSelfMode.trigger(), to satisfy background-activity-launch rules.
     }
 
+    /**
+     * While this session is alive, re-evaluate the auto day/night value every minute and push it if it
+     * changed — so a ride that crosses sunset flips the dash to dark on its own. Only [MapTheme.AUTO]
+     * is time-driven; Day/Night are fixed and handled by the initial send + the UI toggle.
+     */
+    private fun startNightAutoLoop(t: AapTransport) = thread(name = "aa-night", isDaemon = true) {
+        try {
+            while (transport === t && running) {
+                Thread.sleep(60_000)
+                if (transport !== t) break
+                val want = NightPrefs.isNightNow(context)
+                if (want != t.nightMode) {
+                    log("[AA] auto map theme → ${if (want) "night" else "day"}")
+                    t.sendNightMode(want)
+                }
+            }
+        } catch (_: InterruptedException) {
+        }
+    }
+
     fun stop() {
         running = false
         AaVideoBridge.touchSink = null
         AaVideoBridge.keySink = null
         AaVideoBridge.scrollSink = null
         AaVideoBridge.previewTouchSink = null
+        AaVideoBridge.nightSink = null
         try { transport?.quit() } catch (_: Exception) {}
         transport = null
         try { connection?.disconnect() } catch (_: Exception) {}
@@ -125,6 +147,7 @@ class AaReceiver(
             AaVideoBridge.keySink = null
             AaVideoBridge.scrollSink = null
             AaVideoBridge.previewTouchSink = null
+            AaVideoBridge.nightSink = null
             try { t.microphone?.stop("transport quit") } catch (_: Exception) {}
             transport = null
             try { conn.disconnect() } catch (_: Exception) {}
@@ -158,6 +181,13 @@ class AaReceiver(
 
         // In-app HUD preview (HudViewActivity) touches — already in AA source space, sent as-is.
         AaVideoBridge.previewTouchSink = { action, pointerId, sx, sy -> input.sendTouch(action, pointerId, sx, sy) }
+
+        // Map day/night → Android Auto NIGHT sensor (drives Maps' dark/light theme). Seed from the
+        // user's Map theme setting, let the UI push live changes, and — in Auto mode — re-evaluate on
+        // a timer so the dash follows nightfall mid-ride without any interaction.
+        t.nightMode = NightPrefs.isNightNow(context)
+        AaVideoBridge.nightSink = { on -> t.sendNightMode(on) }
+        startNightAutoLoop(t)
 
         // Microphone: AA requests it (MICROPHONE_REQUEST) when the Assistant starts; AaMicrophone then
         // streams the phone/helmet mic up the MIC channel so voice destination entry works hands-free.

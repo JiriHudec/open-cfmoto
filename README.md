@@ -51,8 +51,10 @@ dash touchscreen.
 | 🕹️ **On-screen pad + Navigate-to** | In-app D-pad + rotary knob and a "Navigate to…" box push a route to the dash without touching it; map a handlebar button to a saved place for one-press turn-by-turn. |
 | 🎙️ **Voice / Assistant** | Streams your (helmet) mic to Android Auto so "Hey Google" sets a destination hands-free. |
 | ⚡ **One-tap Connect & Auto-connect** | Remembers your bike; reconnects on launch automatically when it's in range (toggleable). |
+| 🏍️ **Garage (multiple bikes)** | Keep every bike you own in one place — give each a name and photo, and each remembers its own display, resolution, power, and button settings. |
 | 🛰️ **Trip computer + ride logging** | Live speed/distance/duration from GPS, auto-logs every ride, with a saved-trips list and route maps. |
 | 📐 **Smart resolution & orientation** | Auto-fits recognized dashes and learns unknown ones; manual landscape/portrait + SD/HD overrides. |
+| 🌗 **Map dark mode** | Day / Night / Auto theme for the dash map — Auto follows sunset (or your phone's theme). Toggle from Setup, Controls, or the Dash view. |
 | 🔋 **Battery & power tuning** | Frame-rate caps (Smooth / Balanced / Saver) to reduce heat and drain during long rides. |
 | 🛟 **Auto-recovery watchdog** | Detects a stalled or dropped dash and reconnects automatically — no Stop/Start. |
 | 🔄 **Seamless resume** | Stop the bike for a bit? Projection parks to save battery, watches for the bike, and re-projects on its own when it's back — screen off, phone stowed. |
@@ -200,13 +202,18 @@ mirroring link).
 
 <br clear="all"/>
 
-### 📱 Multiple bikes
+### 🏍️ Garage (multiple bikes)
 
-<img src="docs/screenshots/07_devices.png" width="240" align="right" alt="Paired bikes"/>
+<img src="docs/screenshots/07_devices.png" width="240" align="right" alt="Garage — saved bikes"/>
 
-**Devices** lists every bike you've paired. Pick one and tap **Use this bike**, **Scan new** to add
-another, or **Remove** to forget one. The most recent bike is what one-tap **Connect** and
-auto-connect target.
+The **Garage** holds every bike you've paired. Tap a bike to **make it active**, **rename** it, give it
+a **photo**, or **remove** it — and **Scan new bike** to add another. The active bike is what one-tap
+**Connect** and auto-connect target.
+
+Best of all, **settings are per-bike**: screen fit, resolution, power mode, map theme, and your
+handlebar-button mapping are all remembered separately for each motorcycle, so switching bikes restores
+that bike's exact setup. (Your existing single-bike settings carry over as the default for every bike,
+and a freshly scanned bike inherits them until you customize it.)
 
 <br clear="all"/>
 
@@ -224,6 +231,20 @@ Android Auto only supports a fixed set of resolutions, and dashes come in differ
 
 > HD is sharper but heavier and can black-screen on some dashes — drop to a smaller size or Auto if
 > that happens.
+
+### 🌗 Map dark mode
+
+Switch the dash map between light and dark to match the light. Set it from **Setup ▸ Map theme**, the
+**Controls** screen, or the **🌗** button in the **Dash view** — all three share one setting and apply
+**instantly** while you're projecting (no reconnect):
+
+- **Auto** — dark at night, light by day. It follows your phone's dark theme if you have one scheduled,
+  and falls back to a sunset/sunrise clock so it still flips on a phone left on a fixed theme.
+- **Day** — always the light map.
+- **Night** — always the dark map.
+
+It works by reporting the head unit's *night* state to Android Auto, so Google Maps / Waze switch their
+own day/night map styles.
 
 ### 🔋 Battery & power, startup & recovery
 
@@ -313,7 +334,8 @@ Tap **View & control dash** on the main screen to see the **live dashboard insid
 exactly what's on the bike, so you can set up navigation or pick music on the phone before you ride —
 then pocket it. On touch dashes you can **drive it directly with your fingers** (pinch-to-zoom
 included); a bottom bar (knob, D-pad, OK, Back, Home, voice) works on every dash. Hit **⛶** for a clean
-fullscreen view (hides the app and phone bars); **Back** exits fullscreen.
+fullscreen view (hides the app and phone bars); **Back** exits fullscreen. The **🌗** button cycles the
+map's [dark mode](#-map-dark-mode) live.
 
 <p>
 <img src="docs/screenshots/13_dash_view.png" width="240" alt="In-app Dash view — live Android Auto with on-screen controls"/>
@@ -341,8 +363,8 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | **Scan bike** | Scan a bike's pairing QR to pair/connect (adds it to Devices). |
 | **Mirror** | Mirror your **whole phone screen** to the dash instead of Android Auto. |
 | **Stop** | Stop everything and disconnect from the bike Wi‑Fi. |
-| **Setup** | Permissions, Android Auto setup, display/battery, startup & recovery, Bluetooth. |
-| **Devices** | Manage paired bikes (select / add / remove). |
+| **Setup** | Permissions, Android Auto setup, display/battery, map theme, startup & recovery, Bluetooth. |
+| **Garage** | Manage your bikes — select, rename, add a photo, add/remove (each keeps its own settings). |
 | **Trip** | GPS trip computer + saved rides and route maps. |
 | **Controls & handlebar buttons** | On-screen D-pad/knob, "Navigate to…", and handlebar-button setup + remapping. |
 | **Logs** | Show/hide the live diagnostics panel (with Share / Clear). |
@@ -362,6 +384,7 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | Symptom | Try this |
 | --- | --- |
 | App **won't connect** / keeps retrying, or the dash shows **"device is not on the network"** | This is usually the **dash's Wi‑Fi hotspot** stuck in a bad state. On the dash's phone-connection screen, **toggle between the Android and iOS (CarPlay) QR codes** — this restarts the HUD's Wi‑Fi network — then tap **Connect** again. |
+| Dash stays **blank** and the app says to **close the official CFMoto app** | The official CFMoto / EasyConnect app grabs the same link ports, so the bike connects to *it* instead. The app pops a prompt with **Close & retry** (best-effort) and **App settings** (tap *Force stop*); do that and reconnect. |
 | Dash stays **black** after connecting | Tap **Stop**, then **Connect** / **Scan bike** again. Make sure the dash is on its phone-connection screen. |
 | **No Wi‑Fi dialog** appears | Confirm the Location permission is granted; move the phone next to the bike; tap **Stop** and retry. Some phones show the dialog behind Android Auto — swipe back to OpenCfMoto. |
 | **Android Auto never starts** | Re-check [step 3](#3-one-time-android-auto-setup) (developer mode + unknown sources). |

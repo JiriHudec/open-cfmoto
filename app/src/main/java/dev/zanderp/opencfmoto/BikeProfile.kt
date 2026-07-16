@@ -86,9 +86,18 @@ interface BikeProfile {
 /** Registry + selection. Never returns null — falls back to the legacy (BIKE A) profile. */
 object BikeProfiles {
     val legacy: BikeProfile = LegacyCfdl16Profile
-    private val all: List<BikeProfile> = listOf(Cfdl26PortraitProfile, Cfdl26LandscapeProfile, LegacyCfdl16Profile)
 
-    /** Authoritative selection from CLIENT_INFO (during the PXC handshake). */
+    // Order matters: [maxByOrNull] keeps the FIRST profile on a score tie, so this list is the
+    // tie-break priority. LANDSCAPE is first on purpose — the vast majority of CFMoto dashes are
+    // landscape (800x480), and some firmwares (e.g. the "linux_no_package" / version_name "5.0"
+    // units) match no strong CLIENT_INFO signal and tie every profile at 1. Defaulting an ambiguous
+    // tie to Portrait sized the Android Auto video for a tall screen it doesn't have, which the dash
+    // rejected → a ~7s connect/drop flap. A genuine portrait unit (1000 MT-X) still wins outright
+    // because it scores far higher (CFDL26 version_name + its package), so order only decides ties.
+    private val all: List<BikeProfile> = listOf(Cfdl26LandscapeProfile, Cfdl26PortraitProfile, LegacyCfdl16Profile)
+
+    /** Authoritative selection from CLIENT_INFO (during the PXC handshake). Ties resolve to the
+     *  first profile in [all] (landscape-first) — see the note there. */
     fun select(info: JSONObject, log: (String) -> Unit): BikeProfile {
         val scored = all.map { it to it.score(info) }
         log("[profile] scores=" + scored.joinToString { "${it.first.name}=${it.second}" })
@@ -177,7 +186,10 @@ object LegacyCfdl16Profile : BikeProfile {
     /** Known 675 QR modelId. Legacy is also the fallback, so this is just for a positive early match. */
     override fun matchesModelId(modelId: String): Boolean = modelId.trim() == "37416"
 
-    /** Constant floor so legacy always wins ties and is the guaranteed fallback. */
+    /** Constant floor so a bike matching no strong signal still selects a usable (landscape 800x480)
+     *  profile, and so legacy is the guaranteed fallback. It no longer "wins" ties — the CFDL26
+     *  Landscape profile is ordered ahead of it (see [BikeProfiles.all]) so an ambiguous CFDL26-style
+     *  unit still gets the control-frame acks it needs while staying landscape. */
     override fun score(info: JSONObject): Int = 1
 
     override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =

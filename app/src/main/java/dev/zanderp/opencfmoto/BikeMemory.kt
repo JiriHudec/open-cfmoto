@@ -4,8 +4,11 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One remembered bike: the exact scanned QR plus a friendly name for the UI. */
-data class SavedBike(val raw: String, val name: String) {
+/**
+ * One remembered bike: the exact scanned QR, a friendly (user-editable) name, and an optional photo
+ * (an absolute path to an image imported into the app's private storage).
+ */
+data class SavedBike(val raw: String, val name: String, val photoPath: String? = null) {
     val qr: QrData? get() = QrData.parse(raw)
 }
 
@@ -40,7 +43,8 @@ object BikeMemory {
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val raw = o.optString("raw"); val name = o.optString("name")
-                if (raw.isNotBlank()) add(SavedBike(raw, name.ifBlank { raw }))
+                val photo = o.optString("photo").takeIf { it.isNotBlank() }
+                if (raw.isNotBlank()) add(SavedBike(raw, name.ifBlank { raw }, photo))
             }
         }
     }
@@ -53,12 +57,14 @@ object BikeMemory {
         return list.firstOrNull { it.raw == sel } ?: list.first()
     }
 
-    /** Persist (or move-to-front) the QR we just connected with, and select it. */
+    /** Persist (or move-to-front) the QR we just connected with, and select it. Keeps any custom
+     *  name/photo the rider already gave this bike. */
     fun save(ctx: Context, raw: String, qr: QrData) {
-        val name = displayName(qr)
+        val prior = devices(ctx).firstOrNull { it.raw == raw }
+        val name = prior?.name ?: displayName(qr)
         val existing = devices(ctx).filter { it.raw != raw }
         val list = buildList {
-            add(SavedBike(raw, name))
+            add(SavedBike(raw, name, prior?.photoPath))
             addAll(existing)
         }
         writeList(ctx, list)
@@ -67,6 +73,19 @@ object BikeMemory {
 
     fun select(ctx: Context, raw: String) {
         prefs(ctx).edit().putString(KEY_SELECTED, raw).apply()
+    }
+
+    /** Give a bike a new display name (blank keeps the current one). */
+    fun rename(ctx: Context, raw: String, newName: String) {
+        val trimmed = newName.trim()
+        writeList(ctx, devices(ctx).map {
+            if (it.raw == raw && trimmed.isNotBlank()) it.copy(name = trimmed) else it
+        })
+    }
+
+    /** Attach (or clear, with null) a bike's photo path. */
+    fun setPhoto(ctx: Context, raw: String, path: String?) {
+        writeList(ctx, devices(ctx).map { if (it.raw == raw) it.copy(photoPath = path) else it })
     }
 
     fun remove(ctx: Context, raw: String) {
@@ -91,7 +110,11 @@ object BikeMemory {
 
     private fun writeList(ctx: Context, list: List<SavedBike>) {
         val arr = JSONArray()
-        for (b in list) arr.put(JSONObject().put("raw", b.raw).put("name", b.name))
+        for (b in list) {
+            val o = JSONObject().put("raw", b.raw).put("name", b.name)
+            b.photoPath?.let { o.put("photo", it) }
+            arr.put(o)
+        }
         prefs(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
     }
 

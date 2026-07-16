@@ -48,6 +48,8 @@ class MainActivity : AppCompatActivity() {
     private val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
     /** True when the pending QR scan should kick off the Android Auto flow (vs the mirror path). */
     private var pendingAaStart = false
+    /** Guards the "close the official CFMoto app" prompt so it shows once per error, not every redraw. */
+    private var rivalPromptShown = false
 
     private val scanLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -312,7 +314,7 @@ class MainActivity : AppCompatActivity() {
         (findViewById<View>(R.id.et_destination) as? android.widget.EditText)?.setOnEditorActionListener { _, _, _ ->
             navigateToTyped(); true
         }
-        findViewById<View>(R.id.btn_devices).setOnClickListener { showDevicesDialog() }
+        findViewById<View>(R.id.btn_devices).setOnClickListener { GarageActivity.start(this) }
 
         findViewById<View>(R.id.btn_trip).setOnClickListener { TripActivity.start(this) }
 
@@ -342,6 +344,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // The active bike (and its name) may have changed in the Garage — reflect it on the label and
+        // the Connect button.
+        refreshBikeLabel()
+        renderStatus(ConnectionState.phase, ConnectionState.detail)
         // Retry auto-connect on resume: after finishing first-run setup, or once the bike's Wi-Fi
         // comes into range shortly after launch. Guarded so it only ever starts one attempt.
         if (SetupActivity.hasSeen(this)) maybeAutoConnect()
@@ -470,6 +476,14 @@ class MainActivity : AppCompatActivity() {
         statusView.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         statusIcon.setColorFilter(color)
         statusProgress.visibility = if (phase.busy) View.VISIBLE else View.GONE
+
+        // The bike's link ports are held by the official CFMoto app — offer to close it (see
+        // EasyConnProber's bind-conflict path). Show once per error so we don't nag on every redraw.
+        if (phase == Phase.ERROR && detail.contains("CFMoto app", ignoreCase = true)) {
+            if (!rivalPromptShown) { rivalPromptShown = true; promptCloseRival() }
+        } else {
+            rivalPromptShown = false
+        }
         connectBtn.text = when {
             phase.busy -> "Connecting…"
             phase == Phase.STREAMING || phase == Phase.MIRRORING -> "Reconnect"
@@ -505,47 +519,50 @@ class MainActivity : AppCompatActivity() {
         bikeView.text = bikeLabelText()
     }
 
+    /**
+     * The official CFMoto app is holding the mirroring-link ports. Android won't let us silently
+     * force-stop another app, so offer a best-effort background kill and a one-tap jump to its
+     * App-info screen (guaranteed Force stop), then reconnect.
+     */
+    private fun promptCloseRival() {
+        val installed = RivalClient.isInstalled(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Official CFMoto app is in the way")
+            .setMessage(
+                "The official CFMoto/EasyConnect app is running and holding the bike's link ports, so " +
+                    "the dash stays blank. Close it, then reconnect.\n\n" +
+                    "\"Close & retry\" tries to stop it for you; if the dash is still blank, use " +
+                    "\"App settings\" and tap Force stop."
+            )
+            .setPositiveButton("Close & retry") { _, _ ->
+                val killed = RivalClient.closeBestEffort(this)
+                log(if (killed) "→ asked Android to close the official CFMoto app; retrying…"
+                    else "→ couldn't auto-close the official CFMoto app — open its settings to Force stop.")
+                connectBtn.postDelayed({ reconnectSavedBike() }, 1500)
+            }
+            .setNeutralButton("App settings") { _, _ ->
+                if (!RivalClient.openAppInfo(this)) {
+                    Toast.makeText(this, "Couldn't open app settings", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Dismiss", null)
+            .setCancelable(true)
+            .apply { if (!installed) setMessage("Something is holding the bike's link ports (10920-10922). Close any other CFMoto/EasyConnect app and reconnect.") }
+            .show()
+    }
+
+    /** Re-run the one-tap Connect for the saved bike (used after closing the rival app). */
+    private fun reconnectSavedBike() {
+        val saved = BikeMemory.lastQr(this) ?: return
+        ProjectionHolder.projection = null
+        ensureLocationPermission()
+        startAaFlow(saved)
+    }
+
     private fun bikeLabelText(): String {
         val name = BikeMemory.lastBikeName(this)
         return if (name != null) "Paired: $name — tap Connect to reconnect"
         else "No bike paired yet — tap Connect to scan the dash QR"
-    }
-
-    /** Paired-bikes manager: pick the active bike, scan a new one, or remove one. */
-    private fun showDevicesDialog() {
-        val devices = BikeMemory.devices(this)
-        val selected = BikeMemory.selected(this)
-        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Paired bikes")
-
-        if (devices.isEmpty()) {
-            builder.setMessage("No bikes paired yet. Scan your dash QR to add one.")
-                .setPositiveButton("Scan bike") { _, _ -> startAaScan() }
-                .setNegativeButton("Close", null)
-                .show()
-            return
-        }
-
-        val labels = devices.map { it.name }.toTypedArray()
-        val checked = devices.indexOfFirst { it.raw == selected?.raw }.coerceAtLeast(0)
-        var choice = checked
-        builder.setSingleChoiceItems(labels, checked) { _, which -> choice = which }
-            .setPositiveButton("Use this bike") { _, _ ->
-                val bike = devices.getOrNull(choice) ?: return@setPositiveButton
-                BikeMemory.select(this, bike.raw)
-                refreshBikeLabel()
-                renderStatus(ConnectionState.phase, ConnectionState.detail)
-                Toast.makeText(this, "Selected ${bike.name}", Toast.LENGTH_SHORT).show()
-            }
-            .setNeutralButton("Scan new") { _, _ -> startAaScan() }
-            .setNegativeButton("Remove") { _, _ ->
-                val bike = devices.getOrNull(choice) ?: return@setNegativeButton
-                BikeMemory.remove(this, bike.raw)
-                refreshBikeLabel()
-                renderStatus(ConnectionState.phase, ConnectionState.detail)
-                Toast.makeText(this, "Removed ${bike.name}", Toast.LENGTH_SHORT).show()
-            }
-            .show()
     }
 
     /**

@@ -99,16 +99,36 @@ class EasyConnProber(
         acquireMulticastLock()
 
         // 1. Listen on all three ports BEFORE probing, so we're ready for the bike's call-back.
+        //    SO_REUSEADDR (set before bind) lets us re-listen immediately after a Stop→Connect: the
+        //    bike's just-closed call-back sockets leave these ports in TIME_WAIT for up to a couple
+        //    minutes, and without reuse the rebind fails with EADDRINUSE — so no media servers open,
+        //    the bike has nowhere to connect back to, and the dash shows an empty screen (no frames).
+        var bindConflict = false
         for (port in LISTEN_PORTS) {
             try {
-                val ss = ServerSocket(port, 50, myIp)
+                val ss = ServerSocket()
+                ss.reuseAddress = true
+                ss.bind(InetSocketAddress(myIp, port), 50)
                 servers.add(ss)
                 spawnAccept(port, ss)
             } catch (e: Exception) {
+                bindConflict = true
                 log("bind :$port failed: ${e.message}")
             }
         }
-        log("listening on ${myIp.hostAddress} ports ${LISTEN_PORTS.toList()}")
+        log("listening on ${myIp.hostAddress} ports ${LISTEN_PORTS.toList()} (${servers.count { !it.isClosed }} open)")
+
+        // If a port is taken, the bike's mirroring link ports are held by another EasyConnect client —
+        // almost always the official CFMoto app running in the background (it binds the same 10920-10922
+        // and the bike connects back to IT, not us). Probing anyway is pointless: no media server means
+        // no frames and a blank dash. Fail fast with an actionable message instead of failing silently.
+        if (bindConflict) {
+            log("!! link ports are held by another app (usually the official CFMoto/EasyConnect app). " +
+                "Close it (force-stop) and reconnect — OpenCfMoto needs ports ${LISTEN_PORTS.toList()}.")
+            ConnectionState.set(Phase.ERROR, "close the official CFMoto app, then reconnect")
+            stop()
+            return
+        }
 
         // 2. Send the probe (gives the bike our IP → it connects back).
         thread(name = "ec-probe", isDaemon = true) {

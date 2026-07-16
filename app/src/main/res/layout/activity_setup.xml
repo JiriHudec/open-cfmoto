@@ -278,6 +278,60 @@
                         android:text="Stretch" />
                 </LinearLayout>
 
+                <!-- Map theme (Maps day/night) -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Map theme"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/theme_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp"
+                    android:text="Auto (day / night)"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/theme_auto"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:text="Auto" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/theme_day"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
+                        android:layout_weight="1"
+                        android:text="Day" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/theme_night"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1"
+                        android:text="Night" />
+                </LinearLayout>
+
                 <!-- Resolution & orientation -->
                 <TextView
                     android:layout_width="match_parent"

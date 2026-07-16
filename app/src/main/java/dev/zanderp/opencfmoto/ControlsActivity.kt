@@ -90,6 +90,38 @@ class ControlsActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btn_customize).setOnClickListener {
             startActivity(Intent(this, ButtonMappingActivity::class.java))
         }
+
+        // Map theme (Maps day/night) — applies live to any running AA session.
+        findViewById<MaterialButton>(R.id.theme_auto).setOnClickListener { setMapTheme(MapTheme.AUTO) }
+        findViewById<MaterialButton>(R.id.theme_day).setOnClickListener { setMapTheme(MapTheme.DAY) }
+        findViewById<MaterialButton>(R.id.theme_night).setOnClickListener { setMapTheme(MapTheme.NIGHT) }
+        highlightTheme(NightPrefs.theme(this))
+    }
+
+    private fun setMapTheme(theme: MapTheme) {
+        NightPrefs.setTheme(this, theme)
+        AaVideoBridge.nightSink?.invoke(NightPrefs.isNightNow(this))
+        highlightTheme(theme)
+        Toast.makeText(this, "Map theme: ${theme.label}", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Paint the selected segment in brand color; the rest stay neutral tonal. */
+    private fun highlightTheme(selected: MapTheme) {
+        val onColor = ContextCompat.getColor(this, R.color.brand_orange)
+        val onText = ContextCompat.getColor(this, R.color.on_brand)
+        val offColor = ContextCompat.getColor(this, R.color.surface_high)
+        val offText = ContextCompat.getColor(this, R.color.text_primary)
+        val pairs = listOf(
+            R.id.theme_auto to MapTheme.AUTO,
+            R.id.theme_day to MapTheme.DAY,
+            R.id.theme_night to MapTheme.NIGHT,
+        )
+        for ((id, theme) in pairs) {
+            val btn = findViewById<MaterialButton>(id)
+            val on = theme == selected
+            btn.backgroundTintList = android.content.res.ColorStateList.valueOf(if (on) onColor else offColor)
+            btn.setTextColor(if (on) onText else offText)
+        }
     }
 
     private fun key(code: Int) {

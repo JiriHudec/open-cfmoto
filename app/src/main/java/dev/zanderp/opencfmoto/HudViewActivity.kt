@@ -102,6 +102,7 @@ class HudViewActivity : AppCompatActivity() {
         findViewById<View>(R.id.hud_close).setOnClickListener { finish() }
         findViewById<View>(R.id.hud_toggle_controls).setOnClickListener { toggleControls() }
         findViewById<View>(R.id.hud_fullscreen).setOnClickListener { setFullscreen(!fullscreen) }
+        findViewById<View>(R.id.hud_theme).setOnClickListener { cycleMapTheme() }
 
         findViewById<View>(R.id.hud_knob_back).setOnClickListener { scroll(-1) }
         findViewById<View>(R.id.hud_knob_fwd).setOnClickListener { scroll(+1) }
@@ -126,6 +127,15 @@ class HudViewActivity : AppCompatActivity() {
     private fun refreshHint() {
         val live = AaVideoBridge.pipeline != null
         hint.visibility = if (live) View.GONE else View.VISIBLE
+    }
+
+    /** Cycle Auto → Day → Night and apply it live to the dash (and this preview). */
+    private fun cycleMapTheme() {
+        val theme = NightPrefs.cycle(this)
+        val on = NightPrefs.isNightNow(this)
+        AaVideoBridge.nightSink?.invoke(on)
+        val extra = if (theme == MapTheme.AUTO) " (${if (on) "night" else "day"} now)" else ""
+        Toast.makeText(this, "Map theme: ${theme.label}$extra", Toast.LENGTH_SHORT).show()
     }
 
     private fun toggleControls() {

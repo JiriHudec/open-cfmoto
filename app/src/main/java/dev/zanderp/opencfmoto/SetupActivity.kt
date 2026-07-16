@@ -34,6 +34,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var fitDesc: TextView
     private lateinit var powerDesc: TextView
     private lateinit var resDesc: TextView
+    private lateinit var themeDesc: TextView
     private lateinit var btStatus: TextView
     private lateinit var resumeBtn: MaterialButton
 
@@ -56,6 +57,7 @@ class SetupActivity : AppCompatActivity() {
         fitDesc = findViewById(R.id.fit_desc)
         powerDesc = findViewById(R.id.power_desc)
         resDesc = findViewById(R.id.res_desc)
+        themeDesc = findViewById(R.id.theme_desc)
         btStatus = findViewById(R.id.bt_status)
         resumeBtn = findViewById(R.id.resume_perm_btn)
 
@@ -78,6 +80,9 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.res_land_hd).setOnClickListener { setResolution(ResolutionMode.LANDSCAPE_HD) }
         findViewById<MaterialButton>(R.id.res_port_sd).setOnClickListener { setResolution(ResolutionMode.PORTRAIT_SD) }
         findViewById<MaterialButton>(R.id.res_port_hd).setOnClickListener { setResolution(ResolutionMode.PORTRAIT_HD) }
+        findViewById<MaterialButton>(R.id.theme_auto).setOnClickListener { setMapTheme(MapTheme.AUTO) }
+        findViewById<MaterialButton>(R.id.theme_day).setOnClickListener { setMapTheme(MapTheme.DAY) }
+        findViewById<MaterialButton>(R.id.theme_night).setOnClickListener { setMapTheme(MapTheme.NIGHT) }
         findViewById<MaterialButton>(R.id.autoconnect_on).setOnClickListener { setAutoConnect(true) }
         findViewById<MaterialButton>(R.id.autoconnect_off).setOnClickListener { setAutoConnect(false) }
         findViewById<MaterialButton>(R.id.recovery_on).setOnClickListener { setAutoRecovery(true) }
@@ -117,6 +122,14 @@ class SetupActivity : AppCompatActivity() {
         toast("Resolution: ${m.label}")
     }
 
+    /** Map day/night applies live (no reconnect needed) — push it to any running AA session. */
+    private fun setMapTheme(theme: MapTheme) {
+        NightPrefs.setTheme(this, theme)
+        AaVideoBridge.nightSink?.invoke(NightPrefs.isNightNow(this))
+        refreshOptions()
+        Toast.makeText(this, "Map theme: ${theme.label}", Toast.LENGTH_SHORT).show()
+    }
+
     private fun setAutoConnect(on: Boolean) {
         AppSettings.setAutoConnect(this, on)
         refreshOptions()
@@ -144,10 +157,12 @@ class SetupActivity : AppCompatActivity() {
         val fit = VideoPrefs.fit(this)
         val power = VideoPrefs.power(this)
         val res = VideoPrefs.resolution(this)
+        val theme = NightPrefs.theme(this)
         qualityDesc.text = quality.label
         fitDesc.text = fit.label
         powerDesc.text = power.label
         resDesc.text = res.label
+        themeDesc.text = theme.label
 
         highlight(quality,
             R.id.quality_smooth to VideoQuality.SMOOTH,
@@ -167,6 +182,10 @@ class SetupActivity : AppCompatActivity() {
             R.id.res_land_hd to ResolutionMode.LANDSCAPE_HD,
             R.id.res_port_sd to ResolutionMode.PORTRAIT_SD,
             R.id.res_port_hd to ResolutionMode.PORTRAIT_HD)
+        highlight(theme,
+            R.id.theme_auto to MapTheme.AUTO,
+            R.id.theme_day to MapTheme.DAY,
+            R.id.theme_night to MapTheme.NIGHT)
 
         highlight(AppSettings.autoConnect(this),
             R.id.autoconnect_on to true,

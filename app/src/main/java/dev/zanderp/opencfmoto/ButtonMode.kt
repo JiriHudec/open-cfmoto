@@ -18,10 +18,13 @@ object ButtonMode {
     private const val PREF = "button_mode"
     private const val KEY = "controlAa"
 
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+
     fun isControlAa(context: Context): Boolean =
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY, false)
+        BikeScope.getBoolean(prefs(context), context, KEY, false)
 
     fun set(context: Context, controlAa: Boolean) {
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean(KEY, controlAa).apply()
+        BikeScope.putBoolean(prefs(context), context, KEY, controlAa)
     }
 }
