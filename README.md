@@ -309,6 +309,7 @@ the mirroring link — so you must **pair the phone to the bike over Bluetooth**
 | **Select** — Enter / ★ (start) button | Select / OK |
 | **Backward ×2** (double-tap, non-touch dashes) | Home (app list) |
 | **Forward ×2** (double-tap, non-touch dashes) | Back |
+| **Select ×2** (double-tap Enter / ★) | Assistant (voice) |
 
 The mapping is by **meaning, not by physical button**: the app auto-routes whatever your bike
 sends — the 450SR's ▲/▼ volume, or the 800MT's ◀/▶ track keys — into the same Backward / Forward /

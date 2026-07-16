@@ -272,6 +272,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
 
     fun stop() {
         if (instance === this) instance = null
+        cancelPendingTaps()
         stopVolumeObserver()
         unpinVolume()
         releaseMediaFocus()
@@ -327,17 +328,16 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
                 // dash), and until we re-pin, a follow-up press is measured from the wrong base.
                 try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0) } catch (_: Exception) {}
 
-                val double = kotlin.math.abs(jump) >= DOUBLE_TAP_STEPS
+                // A big single write means the dash coalesced a double-tap into one jump — take the
+                // fast path and fire ×2 immediately. Otherwise let the time-window detector decide,
+                // so dashes that send two separate ~1-step writes still register a double-tap.
+                val forceDouble = kotlin.math.abs(jump) >= DOUBLE_TAP_STEPS
                 // Volume UP = backward (previous item), DOWN = forward (next item) — same semantics as
                 // the 800MT's ◀/▶ track keys, so both layouts drive the same gestures.
-                val gesture = when {
-                    up && double -> ButtonGesture.NAV_BACK_DOUBLE
-                    up -> ButtonGesture.NAV_BACK
-                    double -> ButtonGesture.NAV_FWD_DOUBLE
-                    else -> ButtonGesture.NAV_FWD
-                }
-                log("[BTN] volume $dir ($pinnedVolume→$now, jump=$jump)${if (double) " ×2" else ""}")
-                run(gesture)
+                val single = if (up) ButtonGesture.NAV_BACK else ButtonGesture.NAV_FWD
+                val double = if (up) ButtonGesture.NAV_BACK_DOUBLE else ButtonGesture.NAV_FWD_DOUBLE
+                log("[BTN] volume $dir ($pinnedVolume→$now, jump=$jump)${if (forceDouble) " ×2" else ""}")
+                detectDoubleTap(single, double, forceDouble)
             }
         }
         try {
@@ -351,6 +351,42 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
     private fun stopVolumeObserver() {
         volumeObserver?.let { try { context.contentResolver.unregisterContentObserver(it) } catch (_: Exception) {} }
         volumeObserver = null
+    }
+
+    // ── single vs. double-tap detection ──────────────────────────────────────────────────────────
+
+    /** Per-channel state: a scheduled single press, and when we last saw a tap on this channel. */
+    private class Tap(var pending: Runnable? = null, var lastAt: Long = 0L)
+    /** Keyed by the *single* gesture so ▲ then ▼ within the window stays two singles, not a double. */
+    private val taps = HashMap<ButtonGesture, Tap>()
+
+    /**
+     * Decide between a single press and a double-tap. A double-tap doesn't always arrive as one big
+     * event: volume dashes that coalesce it are handled by [forceDouble] (fired instantly, no wait);
+     * dashes that send two separate presses — and the discrete Select play/pause — are caught by
+     * waiting [DOUBLE_TAP_WINDOW_MS] for a second same-channel tap. A single press therefore fires
+     * only after that window, which is the cost of telling the two apart.
+     */
+    private fun detectDoubleTap(single: ButtonGesture, double: ButtonGesture, forceDouble: Boolean) {
+        val ch = taps.getOrPut(single) { Tap() }
+        val now = android.os.SystemClock.uptimeMillis()
+        // Drop a hardware echo of the SAME physical press (e.g. onPlay + onMediaButtonEvent both fire).
+        if (!forceDouble && now - ch.lastAt < SELECT_ECHO_REFRACTORY_MS) { ch.lastAt = now; return }
+        ch.lastAt = now
+        val wasPending = ch.pending != null
+        ch.pending?.let { handler.removeCallbacks(it); ch.pending = null }
+        if (forceDouble || wasPending) {
+            run(double)   // coalesced jump, or the 2nd tap arrived before the single fired
+        } else {
+            val r = Runnable { ch.pending = null; run(single) }
+            ch.pending = r
+            handler.postDelayed(r, DOUBLE_TAP_WINDOW_MS)
+        }
+    }
+
+    private fun cancelPendingTaps() {
+        taps.values.forEach { it.pending?.let(handler::removeCallbacks) }
+        taps.clear()
     }
 
     // ── gesture → action dispatch ────────────────────────────────────────────────────────────────
@@ -404,8 +440,8 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             return true
         }
         // Fallbacks: the bike takes the raw-key path above; other dashes / BT remotes may dispatch here.
-        override fun onPlay() = run(ButtonGesture.SELECT_PRESS)
-        override fun onPause() = run(ButtonGesture.SELECT_PRESS)
+        override fun onPlay() = selectPressed()
+        override fun onPause() = selectPressed()
     }
 
     /**
@@ -421,13 +457,17 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
         when (keyCode) {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_MEDIA_PLAY,
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> run(ButtonGesture.SELECT_PRESS)
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> selectPressed()
             KeyEvent.KEYCODE_MEDIA_NEXT,
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> run(ButtonGesture.NAV_FWD)
             KeyEvent.KEYCODE_MEDIA_PREVIOUS,
             KeyEvent.KEYCODE_MEDIA_REWIND -> run(ButtonGesture.NAV_BACK)
         }
     }
+
+    /** One press of the OK / ★ button (from either the raw-key path or onPlay/onPause). */
+    private fun selectPressed() =
+        detectDoubleTap(ButtonGesture.SELECT_PRESS, ButtonGesture.SELECT_DOUBLE, forceDouble = false)
 
     companion object {
         /** Duration of the fake track we advertise, so the dash sees a normal "now playing". */
@@ -440,6 +480,19 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
          * a dash calibrates differently, that log line is what to re-read.
          */
         private const val DOUBLE_TAP_STEPS = 3
+
+        /**
+         * How long to wait for a second same-direction tap before committing to a single press. Dashes
+         * that send a double-tap as two separate volume writes (rather than one coalesced jump), and
+         * the discrete Select play/pause, are caught here. Longer = more forgiving doubles but laggier
+         * singles; ~300 ms is the usual single-vs-double sweet spot.
+         */
+        private const val DOUBLE_TAP_WINDOW_MS = 300L
+        /**
+         * A single physical press can echo (e.g. onPlay + onMediaButtonEvent both fire). Two taps this
+         * close together are treated as one press, not a double. Keep it well under a real double-tap.
+         */
+        private const val SELECT_ECHO_REFRACTORY_MS = 80L
 
         private const val REASSERT_POLL_MS = 1_000L
         private const val REASSERT_GIVEUP_MS = 90_000L
