@@ -480,13 +480,53 @@ class EasyConnProber(
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val target = network ?: cm.activeNetwork ?: return null
         val lp = cm.getLinkProperties(target) ?: return null
+
+        // 1. Explicit default-route gateway. Present on most phones — the DHCP server on the
+        //    bike's Wi-Fi Direct group advertises itself as the router.
         for (r in lp.routes) {
             if (r.isDefaultRoute) {
                 val gw = r.gateway
                 if (gw is Inet4Address && !gw.isAnyLocalAddress) return gw
             }
         }
+        // 2. Wi-Fi Direct fallback. Some phones (seen on Samsung / Android 16) install NO default
+        //    route for the P2P group — only the on-link 192.168.49.0/24 subnet with a 0.0.0.0
+        //    gateway. But the group owner (the bike) is always the ".1" host of our own /24 by
+        //    Android's Wi-Fi Direct convention, so derive it from our address. Additive: only runs
+        //    when step 1 found nothing (which would otherwise abort the whole link).
+        for (la in lp.linkAddresses) {
+            val a = la.address
+            if (a is Inet4Address && !a.isLoopbackAddress && !a.isLinkLocalAddress) {
+                gatewayForSubnet(a, la.prefixLength)?.let {
+                    log("no default route — assuming Wi-Fi Direct group owner ${it.hostAddress}")
+                    return it
+                }
+            }
+        }
+        // 3. Last resort.
         return lp.dnsServers.filterIsInstance<Inet4Address>().firstOrNull()
+    }
+
+    /** The ".1" host of [addr]'s subnet (network address | 1) — the Wi-Fi Direct group-owner IP. */
+    private fun gatewayForSubnet(addr: Inet4Address, prefix: Int): Inet4Address? {
+        if (prefix !in 1..31) return null
+        return try {
+            val b = addr.address
+            val ip = ((b[0].toInt() and 0xFF) shl 24) or ((b[1].toInt() and 0xFF) shl 16) or
+                ((b[2].toInt() and 0xFF) shl 8) or (b[3].toInt() and 0xFF)
+            val mask = -1 shl (32 - prefix)
+            val gw = (ip and mask) or 1
+            if (gw == ip) return null // we already are ".1"; there's no distinct gateway to reach
+            val out = byteArrayOf(
+                ((gw ushr 24) and 0xFF).toByte(),
+                ((gw ushr 16) and 0xFF).toByte(),
+                ((gw ushr 8) and 0xFF).toByte(),
+                (gw and 0xFF).toByte(),
+            )
+            Inet4Address.getByAddress(out) as? Inet4Address
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun pickBikeInterfaceIp(network: Network?): Inet4Address? {
