@@ -306,6 +306,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btn_controls).setOnClickListener { startActivity(Intent(this, ControlsActivity::class.java)) }
+        findViewById<Button>(R.id.btn_navigate).setOnClickListener { navigateToTyped() }
+        (findViewById<View>(R.id.et_destination) as? android.widget.EditText)?.setOnEditorActionListener { _, _, _ ->
+            navigateToTyped(); true
+        }
         findViewById<View>(R.id.btn_devices).setOnClickListener { showDevicesDialog() }
 
         findViewById<View>(R.id.btn_trip).setOnClickListener { TripActivity.start(this) }
@@ -623,6 +627,21 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(
                 this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1,
             )
+        }
+    }
+
+    /** Type a destination on the phone → Google Maps turn-by-turn, which shows on the dash via AA. */
+    private fun navigateToTyped() {
+        val field = findViewById<android.widget.EditText>(R.id.et_destination)
+        val dest = field.text?.toString()?.trim().orEmpty()
+        if (dest.isEmpty()) {
+            Toast.makeText(this, "Type a destination first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (NavLauncher.navigate(this, dest, ::log)) {
+            // Dismiss the keyboard so the map is visible.
+            (getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                ?.hideSoftInputFromWindow(field.windowToken, 0)
         }
     }
 

@@ -192,6 +192,35 @@
                 android:text="Logs" />
         </LinearLayout>
 
+        <!-- Quick "type a destination → route shows on the dash" (no dash interaction needed). -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/et_destination"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Navigate to… (type a destination)"
+                android:imeOptions="actionGo"
+                android:inputType="textPostalAddress"
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_navigate"
+                style="@style/Widget.OpenCfMoto.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Go" />
+        </LinearLayout>
+
         <!-- On-screen D-pad / knob + navigate box + handlebar-button mapping. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_controls"
