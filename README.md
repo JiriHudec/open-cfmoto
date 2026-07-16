@@ -9,6 +9,12 @@ every ride — all from an Android phone in your pocket.
 
 <br/>
 
+[![Join the Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/xRt5yZy2U)
+
+**💬 Questions, logs, or a new bike to add? [Join the Open CFMoto Discord](https://discord.gg/xRt5yZy2U).**
+
+<br/>
+
 <img src="docs/screenshots/01_main.png" width="240" alt="Home screen"/>&nbsp;
 <img src="docs/screenshots/02_setup.png" width="240" alt="Setup — display"/>&nbsp;
 <img src="docs/screenshots/09_trip_map.png" width="240" alt="Logged ride on the map"/>
@@ -297,7 +303,22 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | **Didn't resume on its own** after a long stop | Enable **Seamless resume** (Setup ▸ Startup & recovery → *Display over other apps*) so the app can re-project with the screen off; otherwise tap the **“Bike reconnected”** notification. |
 
 **Getting help:** reproduce the issue, then tap **Logs ▸ Share** and send the log file — it describes
-each step and makes problems diagnosable.
+each step and makes problems diagnosable. Drop it in the
+**[Discord](https://discord.gg/xRt5yZy2U)** and we'll help you out.
+
+---
+
+## 💬 Community
+
+Got a question, a log to share, or a bike you'd like supported? **Join the
+[Open CFMoto Discord](https://discord.gg/xRt5yZy2U).** It's the fastest place to get help, compare
+notes across bikes/phones, share captures that help add new dash profiles, and hear about new releases.
+
+<div align="center">
+
+[![Join the Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/xRt5yZy2U)
+
+</div>
 
 ---
 
@@ -390,6 +411,6 @@ opt-in GPS trip logging and the OpenStreetMap map tiles — is in **[PRIVACY.md]
 
 <div align="center">
 
-<sub>Built with ❤️ for the CFMoto community.</sub>
+<sub>Built with ❤️ for the CFMoto community — [join us on Discord](https://discord.gg/xRt5yZy2U).</sub>
 
 </div>
