@@ -46,6 +46,7 @@ dash touchscreen.
 | --- | --- |
 | 🗺️ **Android Auto on the dash** | Relays Google Maps / Waze / any AA app to the MotoPlay screen over Wi‑Fi. |
 | 👆 **Multi-touch** | Two-finger pinch-to-zoom and full tap/scroll straight from the dash touchscreen. |
+| 📺 **In-app Dash view** | Watch and drive the live dash from inside the app — touch, on-screen pad, and a fullscreen mode — handy for setting up nav before you ride. |
 | 🎛️ **Handlebar buttons drive AA** | On touchless dashes, the bike's ▲/▼/enter buttons navigate Android Auto over Bluetooth (rotary knob / select / back / home) — every gesture remappable. |
 | 🕹️ **On-screen pad + Navigate-to** | In-app D-pad + rotary knob and a "Navigate to…" box push a route to the dash without touching it; map a handlebar button to a saved place for one-press turn-by-turn. |
 | 🎙️ **Voice / Assistant** | Streams your (helmet) mic to Android Auto so "Hey Google" sets a destination hands-free. |
@@ -305,6 +306,20 @@ when a nav button is mapped).
 
 **Voice.** Map any gesture (or tap **Voice**) to the Assistant and ask for directions through your
 helmet mic — OpenCfMoto streams the mic to Android Auto (grant the microphone permission when asked).
+
+### 📺 Dash view (watch & control from the phone)
+
+Tap **View & control dash** on the main screen to see the **live dashboard inside the app**. It mirrors
+exactly what's on the bike, so you can set up navigation or pick music on the phone before you ride —
+then pocket it. On touch dashes you can **drive it directly with your fingers** (pinch-to-zoom
+included); a bottom bar (knob, D-pad, OK, Back, Home, voice) works on every dash. Hit **⛶** for a clean
+fullscreen view (hides the app and phone bars); **Back** exits fullscreen.
+
+<p>
+<img src="docs/screenshots/13_dash_view.png" width="240" alt="In-app Dash view — live Android Auto with on-screen controls"/>
+</p>
+
+<br clear="all"/>
 
 ### 🧰 Diagnostics
 
