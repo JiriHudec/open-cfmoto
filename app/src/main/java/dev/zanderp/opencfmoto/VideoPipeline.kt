@@ -308,6 +308,15 @@ class VideoPipeline(
      *  null if the point is in a black bar. See AaCompositor.mapCanvasToSource. */
     fun mapBikeTouchToSource(cx: Int, cy: Int): Pair<Int, Int>? = aaCompositor?.mapCanvasToSource(cx, cy)
 
+    /** Compositor mode: attach an in-app phone preview surface (HudViewActivity). No-op otherwise. */
+    fun setPreviewSurface(surface: Surface, w: Int, h: Int) = aaCompositor?.setPreview(surface, w, h)
+
+    /** Compositor mode: the preview SurfaceView changed size (rotation / relayout). */
+    fun updatePreviewSize(w: Int, h: Int) = aaCompositor?.updatePreviewSize(w, h)
+
+    /** Compositor mode: detach the phone preview (blocks until the GL surface is destroyed). */
+    fun clearPreviewSurface() = aaCompositor?.clearPreview()
+
     /** Called by the data socket on each REQ_RV_DATA_NEXT(114). Returns one access unit. */
     fun pollFrame(timeoutMs: Long): ByteArray? =
         try { frameQueue.pollFirst(timeoutMs, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { null }

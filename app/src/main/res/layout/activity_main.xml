@@ -221,6 +221,15 @@
                 android:text="Go" />
         </LinearLayout>
 
+        <!-- View + control the dash from inside the app (in-app mirror of the AA video). -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_hud_view"
+            style="@style/Widget.OpenCfMoto.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="View &amp; control dash" />
+
         <!-- On-screen D-pad / knob + navigate box + handlebar-button mapping. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_controls"

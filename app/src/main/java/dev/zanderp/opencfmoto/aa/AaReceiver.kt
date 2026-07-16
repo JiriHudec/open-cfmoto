@@ -81,6 +81,7 @@ class AaReceiver(
         AaVideoBridge.touchSink = null
         AaVideoBridge.keySink = null
         AaVideoBridge.scrollSink = null
+        AaVideoBridge.previewTouchSink = null
         try { transport?.quit() } catch (_: Exception) {}
         transport = null
         try { connection?.disconnect() } catch (_: Exception) {}
@@ -123,6 +124,7 @@ class AaReceiver(
             AaVideoBridge.touchSink = null
             AaVideoBridge.keySink = null
             AaVideoBridge.scrollSink = null
+            AaVideoBridge.previewTouchSink = null
             try { t.microphone?.stop("transport quit") } catch (_: Exception) {}
             transport = null
             try { conn.disconnect() } catch (_: Exception) {}
@@ -153,6 +155,9 @@ class AaReceiver(
         // handlebar buttons navigate AA — see MediaButtonBridge). Cleared on transport quit / stop().
         AaVideoBridge.keySink = { keycode -> input.sendKey(keycode) }
         AaVideoBridge.scrollSink = { delta -> input.sendScroll(delta) }
+
+        // In-app HUD preview (HudViewActivity) touches — already in AA source space, sent as-is.
+        AaVideoBridge.previewTouchSink = { action, pointerId, sx, sy -> input.sendTouch(action, pointerId, sx, sy) }
 
         // Microphone: AA requests it (MICROPHONE_REQUEST) when the Assistant starts; AaMicrophone then
         // streams the phone/helmet mic up the MIC channel so voice destination entry works hands-free.

@@ -77,6 +77,10 @@
         <activity
             android:name=".ButtonMappingActivity"
             android:exported="false" />
+        <activity
+            android:name=".HudViewActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <service
             android:name=".ProjectionService"
             android:exported="false"

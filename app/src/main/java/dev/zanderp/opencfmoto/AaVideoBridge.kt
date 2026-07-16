@@ -27,6 +27,15 @@ object AaVideoBridge {
     @Volatile var touchSink: ((action: Int, pointerId: Int, canvasX: Int, canvasY: Int) -> Unit)? = null
 
     /**
+     * In-app phone preview ([HudViewActivity]) → Android Auto input bridge. Unlike [touchSink] (which
+     * takes bike-canvas coordinates and letterbox-maps them), the preview activity already knows the AA
+     * source size, so it passes coordinates **directly in AA video space** ([sourceX]/[sourceY]) and
+     * this forwards them over the AAP INPUT channel as multi-touch. Only effective when the live AA
+     * session advertises a touchscreen (touch dashes); null when no AA session is active.
+     */
+    @Volatile var previewTouchSink: ((action: Int, pointerId: Int, sourceX: Int, sourceY: Int) -> Unit)? = null
+
+    /**
      * Phone/handlebar D-pad → Android Auto input bridge. The on-screen buttons ([ControlsActivity])
      * and the bike's handlebar buttons ([MediaButtonBridge]) call this with an Android keycode (see
      * [dev.zanderp.opencfmoto.aa.AaInput] KEY_* constants); the live AA session ([AaReceiver]) installs

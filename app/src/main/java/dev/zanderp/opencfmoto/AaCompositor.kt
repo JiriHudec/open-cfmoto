@@ -44,6 +44,21 @@ class AaCompositor(private val log: (String) -> Unit) {
     private var pbuffer: EGLSurface = EGL14.EGL_NO_SURFACE   // keeps a current surface before output exists
     private var windowSurface: EGLSurface = EGL14.EGL_NO_SURFACE
 
+    // Optional second render target: an in-app phone preview (HudViewActivity). The same decoded AA
+    // frame is drawn — aspect-fit — into this surface so the rider can watch/drive the dash from the
+    // phone. It's independent of the bike encoder output and works even before the bike links.
+    private var previewSurface: EGLSurface = EGL14.EGL_NO_SURFACE
+    @Volatile private var previewW = 0
+    @Volatile private var previewH = 0
+    private var ppX = 0
+    private var ppY = 0
+    private var ppW = 0
+    private var ppH = 0
+    // AA source (decoder buffer) dims — the preview aspect-fits these; known from start(), independent
+    // of whether the bike canvas (setOutput) is configured yet.
+    @Volatile private var bufW = 0
+    @Volatile private var bufH = 0
+
     private var program = 0
     private var aPosition = 0
     private var aTexCoord = 0
@@ -103,6 +118,7 @@ class AaCompositor(private val log: (String) -> Unit) {
                 initEgl()
                 initGl()
                 val spec = BikeProfileHolder.aaVideo
+                bufW = spec.width; bufH = spec.height
                 surfaceTexture = SurfaceTexture(textureId)
                 surfaceTexture.setDefaultBufferSize(spec.width, spec.height)
                 surfaceTexture.setOnFrameAvailableListener({ handler.post { onFrame() } }, handler)
@@ -135,6 +151,75 @@ class AaCompositor(private val log: (String) -> Unit) {
                 log("[COMPOSITOR] setOutput failed: $e")
             }
         }
+    }
+
+    /**
+     * Attach an in-app phone preview surface (from [dev.zanderp.opencfmoto.HudViewActivity]'s
+     * SurfaceView). The decoded AA frame is drawn aspect-fit into it. Forces one immediate redraw so
+     * the preview shows the current (possibly static) frame right away instead of waiting for motion.
+     */
+    fun setPreview(surface: Surface, w: Int, h: Int) {
+        handler.post {
+            try {
+                if (previewSurface != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglMakeCurrent(eglDisplay, pbuffer, pbuffer, eglContext)
+                    EGL14.eglDestroySurface(eglDisplay, previewSurface)
+                    previewSurface = EGL14.EGL_NO_SURFACE
+                }
+                previewSurface = EGL14.eglCreateWindowSurface(
+                    eglDisplay, eglConfig, surface, intArrayOf(EGL14.EGL_NONE), 0,
+                )
+                previewW = w; previewH = h
+                computePreviewRect()
+                log("[COMPOSITOR] preview attached ${w}x$h → draw rect=${ppW}x$ppH @($ppX,$ppY)")
+                if (hasContent) drawFrame()
+            } catch (e: Exception) {
+                log("[COMPOSITOR] setPreview failed: $e")
+            }
+        }
+    }
+
+    /** The preview SurfaceView changed size (rotation / layout). Recompute the fit rect. */
+    fun updatePreviewSize(w: Int, h: Int) {
+        handler.post {
+            previewW = w; previewH = h
+            computePreviewRect()
+            if (hasContent && previewSurface != EGL14.EGL_NO_SURFACE) drawFrame()
+        }
+    }
+
+    /** Detach the phone preview. Blocks until the GL thread has destroyed the EGL surface, so the
+     *  caller (surfaceDestroyed) can safely let Android release the underlying Surface afterwards. */
+    fun clearPreview() {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        handler.post {
+            try {
+                if (previewSurface != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglMakeCurrent(eglDisplay, pbuffer, pbuffer, eglContext)
+                    EGL14.eglDestroySurface(eglDisplay, previewSurface)
+                }
+            } catch (_: Exception) {
+            } finally {
+                previewSurface = EGL14.EGL_NO_SURFACE
+                previewW = 0; previewH = 0
+                latch.countDown()
+            }
+        }
+        try { latch.await(1, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+    }
+
+    /** Aspect-fit the AA source ([bufW]x[bufH]) into the preview surface ([previewW]x[previewH]). */
+    private fun computePreviewRect() {
+        if (previewW == 0 || previewH == 0 || bufW == 0 || bufH == 0) return
+        val srcAspect = bufW.toFloat() / bufH
+        val viewAspect = previewW.toFloat() / previewH
+        if (srcAspect < viewAspect) {           // source narrower → fit height, bars left/right
+            ppH = previewH; ppW = Math.round(previewH * srcAspect)
+        } else {                                // source wider → fit width, bars top/bottom
+            ppW = previewW; ppH = Math.round(previewW / srcAspect)
+        }
+        ppX = (previewW - ppW) / 2
+        ppY = (previewH - ppH) / 2
     }
 
     /**
@@ -217,7 +302,7 @@ class AaCompositor(private val log: (String) -> Unit) {
      */
     private val keepAlive = object : Runnable {
         override fun run() {
-            if (hasContent && windowSurface != EGL14.EGL_NO_SURFACE) {
+            if (hasContent && (windowSurface != EGL14.EGL_NO_SURFACE || previewSurface != EGL14.EGL_NO_SURFACE)) {
                 val idleMs = android.os.SystemClock.uptimeMillis() - lastDrawMs
                 if (pendingFrame && idleMs >= minFrameIntervalMs) {
                     // Flush the last coalesced live frame so motion doesn't stall at the cap.
@@ -231,18 +316,29 @@ class AaCompositor(private val log: (String) -> Unit) {
         }
     }
 
-    /** Draw the current SurfaceTexture content (last decoded frame) into the encoder, letterboxed. */
+    /**
+     * Draw the current SurfaceTexture content (last decoded frame) into whichever targets exist: the
+     * bike encoder ([windowSurface]) and/or the in-app phone preview ([previewSurface]). Each is
+     * letterboxed into its own viewport.
+     */
     private fun drawFrame() {
-        if (windowSurface == EGL14.EGL_NO_SURFACE) return  // no output canvas yet — just drain
+        if (windowSurface == EGL14.EGL_NO_SURFACE && previewSurface == EGL14.EGL_NO_SURFACE) return
         surfaceTexture.getTransformMatrix(texMatrix)
+        if (windowSurface != EGL14.EGL_NO_SURFACE) renderTo(windowSurface, vpX, vpY, vpW, vpH)
+        if (previewSurface != EGL14.EGL_NO_SURFACE) renderTo(previewSurface, ppX, ppY, ppW, ppH)
+        lastDrawMs = android.os.SystemClock.uptimeMillis()
+        pendingFrame = false
+    }
 
-        EGL14.eglMakeCurrent(eglDisplay, windowSurface, windowSurface, eglContext)
+    /** Render the latched frame into [target], letterboxed to viewport ([vx],[vy],[vw],[vh]). */
+    private fun renderTo(target: EGLSurface, vx: Int, vy: Int, vw: Int, vh: Int) {
+        EGL14.eglMakeCurrent(eglDisplay, target, target, eglContext)
 
         // Black background (the letterbox bars).
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-        GLES20.glViewport(vpX, vpY, vpW, vpH)
+        GLES20.glViewport(vx, vy, vw, vh)
         GLES20.glUseProgram(program)
 
         quad.position(0)
@@ -263,10 +359,8 @@ class AaCompositor(private val log: (String) -> Unit) {
         GLES20.glDisableVertexAttribArray(aTexCoord)
 
         // Monotonic presentation time so repeated (keep-alive) frames aren't dropped as duplicate PTS.
-        EGLExt.eglPresentationTimeANDROID(eglDisplay, windowSurface, System.nanoTime())
-        EGL14.eglSwapBuffers(eglDisplay, windowSurface)
-        lastDrawMs = android.os.SystemClock.uptimeMillis()
-        pendingFrame = false
+        EGLExt.eglPresentationTimeANDROID(eglDisplay, target, System.nanoTime())
+        EGL14.eglSwapBuffers(eglDisplay, target)
     }
 
     fun release() {
@@ -277,6 +371,7 @@ class AaCompositor(private val log: (String) -> Unit) {
             if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
                 EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
                 if (windowSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, windowSurface)
+                if (previewSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, previewSurface)
                 if (pbuffer != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, pbuffer)
                 if (eglContext != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(eglDisplay, eglContext)
                 EGL14.eglTerminate(eglDisplay)
