@@ -13,8 +13,12 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import dev.zanderp.opencfmoto.aa.AaInput
 
 /**
@@ -34,6 +38,8 @@ class HudViewActivity : AppCompatActivity() {
     private lateinit var hint: TextView
     private var attached = false
     private var noSessionToastAt = 0L
+    private var fullscreen = false
+    private lateinit var insetsController: WindowInsetsControllerCompat
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +48,29 @@ class HudViewActivity : AppCompatActivity() {
 
         surface = findViewById(R.id.hud_surface)
         hint = findViewById(R.id.hud_hint)
+
+        insetsController = WindowInsetsControllerCompat(window, findViewById(R.id.hud_root)).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        // Keep the top bar buttons out from under the status bar / camera cutout. In fullscreen the
+        // bars are hidden so the inset is 0 (and the bar itself is gone anyway) — no wasted space.
+        val topbar = findViewById<View>(R.id.hud_topbar)
+        val baseTopPad = topbar.paddingTop
+        val baseLeftPad = topbar.paddingLeft
+        val baseRightPad = topbar.paddingRight
+        ViewCompat.setOnApplyWindowInsetsListener(topbar) { v, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            v.setPadding(baseLeftPad + bars.left, baseTopPad + bars.top, baseRightPad + bars.right, v.paddingBottom)
+            insets
+        }
+        // Back exits fullscreen first (so the rider isn't stuck with no visible controls), then closes.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (fullscreen) setFullscreen(false) else finish()
+            }
+        })
 
         surface.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {}
@@ -72,6 +101,7 @@ class HudViewActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.hud_close).setOnClickListener { finish() }
         findViewById<View>(R.id.hud_toggle_controls).setOnClickListener { toggleControls() }
+        findViewById<View>(R.id.hud_fullscreen).setOnClickListener { setFullscreen(!fullscreen) }
 
         findViewById<View>(R.id.hud_knob_back).setOnClickListener { scroll(-1) }
         findViewById<View>(R.id.hud_knob_fwd).setOnClickListener { scroll(+1) }
@@ -101,6 +131,22 @@ class HudViewActivity : AppCompatActivity() {
     private fun toggleControls() {
         val bar = findViewById<View>(R.id.hud_controls)
         bar.visibility = if (bar.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    }
+
+    /**
+     * Fullscreen = pure dash. Hides the app's top/control bars and the phone's status/nav bars for an
+     * unobstructed view. Back (or another swipe-down + the reappearing bar) exits.
+     */
+    private fun setFullscreen(on: Boolean) {
+        fullscreen = on
+        findViewById<View>(R.id.hud_topbar).visibility = if (on) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.hud_controls).visibility = if (on) View.GONE else View.VISIBLE
+        if (on) {
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            Toast.makeText(this, "Fullscreen — press Back to exit", Toast.LENGTH_SHORT).show()
+        } else {
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     /** Forward preview touches (multi-finger) into AA source space, letterbox-aware. */
