@@ -70,14 +70,23 @@ class ServiceDiscoveryResponse
                 }.build()
             }.build())
 
-            // --- Input service (touchscreen; declared for compatibility, driven by voice in v1) ---
+            // --- Input service (D-pad/rotary keycodes + optional touchscreen) ---
             services.add(Control.Service.newBuilder().also { service ->
                 service.id = Channel.ID_INP
                 service.inputSourceService = Control.Service.InputSourceService.newBuilder().also { inp ->
-                    inp.touchscreen = Control.Service.InputSourceService.TouchConfig.newBuilder().apply {
-                        setWidth(spec.width)
-                        setHeight(spec.height)
-                    }.build()
+                    // D-pad / rotary keycodes so the on-screen and handlebar controls can drive AA.
+                    // Advertising these (esp. KEY_SCROLL_WHEEL) makes Android Auto render a
+                    // focus-navigable UI — the only way to control it on a non-touch dash.
+                    AaInput.SUPPORTED_KEYCODES.forEach { inp.addKeycodesSupported(it) }
+                    // Advertise a touchscreen only on dashes that actually have one. On a non-touch
+                    // dash advertising touch would put AA in touch mode with no on-screen focus for
+                    // the D-pad/knob to move.
+                    if (BikeProfileHolder.active.supportsScreenTouch) {
+                        inp.touchscreen = Control.Service.InputSourceService.TouchConfig.newBuilder().apply {
+                            setWidth(spec.width)
+                            setHeight(spec.height)
+                        }.build()
+                    }
                 }.build()
             }.build())
 

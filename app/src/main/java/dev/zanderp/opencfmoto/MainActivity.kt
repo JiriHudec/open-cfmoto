@@ -305,6 +305,7 @@ class MainActivity : AppCompatActivity() {
             toggleLogBtn.text = if (show) "Hide logs" else "Logs"
         }
 
+        findViewById<View>(R.id.btn_controls).setOnClickListener { startActivity(Intent(this, ControlsActivity::class.java)) }
         findViewById<View>(R.id.btn_devices).setOnClickListener { showDevicesDialog() }
 
         findViewById<View>(R.id.btn_trip).setOnClickListener { TripActivity.start(this) }

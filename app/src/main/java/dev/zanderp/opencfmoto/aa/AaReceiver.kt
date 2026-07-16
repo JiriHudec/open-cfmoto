@@ -79,6 +79,8 @@ class AaReceiver(
     fun stop() {
         running = false
         AaVideoBridge.touchSink = null
+        AaVideoBridge.keySink = null
+        AaVideoBridge.scrollSink = null
         try { transport?.quit() } catch (_: Exception) {}
         transport = null
         try { connection?.disconnect() } catch (_: Exception) {}
@@ -119,6 +121,9 @@ class AaReceiver(
             val userExit = t.wasUserExit
             log("[AA] transport quit (clean=$clean, userExit=$userExit)")
             AaVideoBridge.touchSink = null
+            AaVideoBridge.keySink = null
+            AaVideoBridge.scrollSink = null
+            try { t.microphone?.stop("transport quit") } catch (_: Exception) {}
             transport = null
             try { conn.disconnect() } catch (_: Exception) {}
             connection = null
@@ -143,6 +148,15 @@ class AaReceiver(
                 input.sendTouch(action, pointerId, mapped.first, mapped.second)
             }
         }
+
+        // Phone/handlebar D-pad + rotary knob → Android Auto (drives a non-touch dash, and lets the
+        // handlebar buttons navigate AA — see MediaButtonBridge). Cleared on transport quit / stop().
+        AaVideoBridge.keySink = { keycode -> input.sendKey(keycode) }
+        AaVideoBridge.scrollSink = { delta -> input.sendScroll(delta) }
+
+        // Microphone: AA requests it (MICROPHONE_REQUEST) when the Assistant starts; AaMicrophone then
+        // streams the phone/helmet mic up the MIC channel so voice destination entry works hands-free.
+        t.microphone = AaMicrophone(context, t, log)
 
         log("[AA] starting AAP handshake (version + SSL)…")
         if (!t.startHandshake(conn)) {

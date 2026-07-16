@@ -66,6 +66,8 @@ governing and credits the prior authors here:
   * coletz / dcoletto  — dcoletto/open-cfmoto  (base app, QR/EasyConn work)
   * richardbizik        — richardbizik/open-cfmoto  (1000MT-X support)
   * BojanJ              — BojanJ/open-cfmoto  (Android Auto receiver integration)
+  * ionutradu252        — ionutradu252/open-cfmoto  (CFDL16/450SR handlebar-button
+                          control, on-screen D-pad/knob, navigate-to, Assistant mic)
 
 --------------------------------------------------------------------------------
 Third-party dependencies (fetched at build time, not vendored)

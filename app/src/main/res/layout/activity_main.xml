@@ -192,6 +192,15 @@
                 android:text="Logs" />
         </LinearLayout>
 
+        <!-- On-screen D-pad / knob + navigate box + handlebar-button mapping. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_controls"
+            style="@style/Widget.OpenCfMoto.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Controls &amp; handlebar buttons" />
+
         <!-- Tips panel: fills the space and earns it (battery/how-to guidance). -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/tips_panel"

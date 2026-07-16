@@ -27,10 +27,93 @@ class AaInput(
         const val ACTION_DOWN = 0
         const val ACTION_UP = 1
         const val ACTION_MOVE = 2
+
+        // Android KeyEvent keycodes Android Auto understands for D-pad / rotary focus navigation.
+        // Advertised in ServiceDiscoveryResponse (keycodesSupported) and sent by [sendKey].
+        const val KEY_UP = 19     // KEYCODE_DPAD_UP
+        const val KEY_DOWN = 20   // KEYCODE_DPAD_DOWN
+        const val KEY_LEFT = 21   // KEYCODE_DPAD_LEFT
+        const val KEY_RIGHT = 22  // KEYCODE_DPAD_RIGHT
+        const val KEY_ENTER = 23  // KEYCODE_DPAD_CENTER (select)
+        const val KEY_BACK = 4    // KEYCODE_BACK
+        const val KEY_HOME = 3    // KEYCODE_HOME
+
+        /**
+         * The AAP "rotary controller" scroll-wheel code. We have no physical knob and never SEND it
+         * as a key, but advertising it is what tells Android Auto this is a rotary/non-touch head unit
+         * — which makes AA render a focus highlight for the D-pad keys to move. Without it AA accepts
+         * the keys (HOME works) but has no focus to navigate, so the arrows do nothing on a non-touch
+         * dash. Rotation itself is sent as a RelativeEvent by [sendScroll].
+         */
+        const val KEY_SCROLL_WHEEL = 65536
+
+        /** KEYCODE_SEARCH — what a head unit sends for its "voice / Assistant" button. */
+        const val KEY_ASSISTANT = 84
+
+        /** All keycodes we advertise — declared to AA so it enables rotary/focus navigation. */
+        val SUPPORTED_KEYCODES = intArrayOf(
+            KEY_SCROLL_WHEEL, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_BACK, KEY_HOME,
+            KEY_ASSISTANT,
+        )
     }
 
     /** Insertion-ordered set of down pointers → last known AA-space position. */
     private val pointers = LinkedHashMap<Int, Pair<Int, Int>>()
+
+    /**
+     * Send one key press (down then up) to Android Auto over the INPUT channel. Used by the phone's
+     * on-screen D-pad and by the handlebar buttons ([dev.zanderp.opencfmoto.MediaButtonBridge]) so a
+     * non-touch dash can be driven. AA acts on these when the keycodes were advertised in service
+     * discovery ([SUPPORTED_KEYCODES]).
+     */
+    fun sendKey(keycode: Int) {
+        try {
+            sendKeyReport(keycode, down = true)
+            sendKeyReport(keycode, down = false)
+            log("[AA] sendKey keycode=$keycode")
+        } catch (e: Exception) {
+            log("[AA] sendKey failed: $e")
+        }
+    }
+
+    /**
+     * Emulate one click of the rotary knob: [delta] -1 = rotate back (focus to the previous item),
+     * +1 = rotate forward (next item). On a rotary head unit — which is what AA treats us as once we
+     * advertise [KEY_SCROLL_WHEEL] — the KNOB is the primary navigation and steps focus through list
+     * items (the D-pad only jumps coarsely between panes). Sent as a RelativeEvent on INPUT.
+     */
+    fun sendScroll(delta: Int) {
+        try {
+            val rel = Input.RelativeEvent.newBuilder()
+                .addData(
+                    Input.RelativeEvent_Rel.newBuilder()
+                        .setKeycode(KEY_SCROLL_WHEEL).setDelta(delta).build()
+                )
+                .build()
+            val report = Input.InputReport.newBuilder()
+                .setTimestamp(SystemClock.elapsedRealtimeNanos() / 1000)
+                .setRelativeEvent(rel)
+                .build()
+            transport.send(AapMessage(Channel.ID_INP, Input.MsgType.EVENT_VALUE, report))
+            log("[AA] sendScroll delta=$delta")
+        } catch (e: Exception) {
+            log("[AA] sendScroll failed: $e")
+        }
+    }
+
+    private fun sendKeyReport(keycode: Int, down: Boolean) {
+        val keyEvent = Input.KeyEvent.newBuilder()
+            .addKeys(
+                Input.Key.newBuilder()
+                    .setKeycode(keycode).setDown(down).setMetastate(0).setLongpress(false).build()
+            )
+            .build()
+        val report = Input.InputReport.newBuilder()
+            .setTimestamp(SystemClock.elapsedRealtimeNanos() / 1000)
+            .setKeyEvent(keyEvent)
+            .build()
+        transport.send(AapMessage(Channel.ID_INP, Input.MsgType.EVENT_VALUE, report))
+    }
 
     /**
      * @param action    one of [ACTION_DOWN]/[ACTION_UP]/[ACTION_MOVE]

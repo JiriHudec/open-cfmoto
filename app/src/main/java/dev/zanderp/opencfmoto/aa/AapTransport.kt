@@ -34,6 +34,10 @@ class AapTransport(
     @Volatile var wasUserExit: Boolean = false
     @Volatile var onQuit: ((Boolean) -> Unit)? = null
 
+    /** The head unit's microphone (Assistant voice). Installed by [AaReceiver]; driven by AA's
+     *  MICROPHONE_REQUEST via [AapControlMedia]. Null until a session is set up. */
+    @Volatile var microphone: AaMicrophone? = null
+
     private var pollHandler: Handler? = null
     private val pollHandlerCallback = Handler.Callback {
         val readInstance = aapRead ?: return@Callback false

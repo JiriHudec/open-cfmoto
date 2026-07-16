@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Streams the phone/helmet mic to Android Auto so the Assistant can hear you (voice
+         destination entry). Optional: only used when you tap the Voice control. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- BLE wake-up is dormant/optional, so don't block installs on devices without BLE. -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -67,6 +70,12 @@
             android:exported="false" />
         <activity
             android:name=".TripMapActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ControlsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ButtonMappingActivity"
             android:exported="false" />
         <service
             android:name=".ProjectionService"

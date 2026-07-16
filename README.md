@@ -27,9 +27,10 @@ dash touchscreen.
 ---
 
 > ⚠️ **Community project — not affiliated with or endorsed by CFMoto.** Developed and tested against
-> CFMoto **800MT** and **1000 MT‑X** dashes; other bikes/phones may need a retry or aren't supported
-> yet. Don't rely on it for critical navigation — set your route **before** you ride. Use at your own
-> risk.
+> CFMoto **800MT** and **1000 MT‑X** dashes, with community support for **CFDL16-class** dashes
+> (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C). Other bikes/phones may need a retry or aren't
+> supported yet. Don't rely on it for critical navigation — set your route **before** you ride. Use at
+> your own risk.
 
 ---
 
@@ -39,6 +40,9 @@ dash touchscreen.
 | --- | --- |
 | 🗺️ **Android Auto on the dash** | Relays Google Maps / Waze / any AA app to the MotoPlay screen over Wi‑Fi. |
 | 👆 **Multi-touch** | Two-finger pinch-to-zoom and full tap/scroll straight from the dash touchscreen. |
+| 🎛️ **Handlebar buttons drive AA** | On touchless dashes, the bike's ▲/▼/enter buttons navigate Android Auto over Bluetooth (rotary knob / select / back / home) — every gesture remappable. |
+| 🕹️ **On-screen pad + Navigate-to** | In-app D-pad + rotary knob and a "Navigate to…" box push a route to the dash without touching it; map a handlebar button to a saved place for one-press turn-by-turn. |
+| 🎙️ **Voice / Assistant** | Streams your (helmet) mic to Android Auto so "Hey Google" sets a destination hands-free. |
 | ⚡ **One-tap Connect & Auto-connect** | Remembers your bike; reconnects on launch automatically when it's in range (toggleable). |
 | 🛰️ **Trip computer + ride logging** | Live speed/distance/duration from GPS, auto-logs every ride, with a saved-trips list and route maps. |
 | 📐 **Smart resolution & orientation** | Auto-fits recognized dashes and learns unknown ones; manual landscape/portrait + SD/HD overrides. |
@@ -52,9 +56,13 @@ dash touchscreen.
 
 ## 📋 What you need
 
-- **A CFMoto motorcycle with a MotoPlay / EasyConnect touchscreen dash.**
-  Confirmed working: **800MT** (CFDL26) and **1000 MT‑X**. Other models may work partially — the app
-  learns unrecognized dashes after the first connect (see [Resolution & orientation](#-resolution--orientation)).
+- **A CFMoto motorcycle with a MotoPlay / EasyConnect dash.**
+  Confirmed working: **800MT** (CFDL26) and **1000 MT‑X**. Community-supported **CFDL16-class** dashes
+  (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) — these are typically **non‑touch**, so you
+  drive Android Auto with the **handlebar buttons** and the in-app pad (see
+  [Handlebar & on-screen controls](#-handlebar--on-screen-controls)). Other models may work partially —
+  the app learns unrecognized dashes after the first connect (see
+  [Resolution & orientation](#-resolution--orientation)).
 - **An Android phone**, Android **10 or newer**.
 - **Google Android Auto** installed and set up once (see [step 3](#3-one-time-android-auto-setup)). AA
   is what runs Maps/Waze — OpenCfMoto relays its screen to the bike.
@@ -208,12 +216,36 @@ backpack while riding.
 
 <br clear="all"/>
 
-### 🎧 Handlebar buttons & calls (Bluetooth)
+### 🎛️ Handlebar & on-screen controls
 
-The dash sends the handlebar **media / track / call** buttons over **Bluetooth** — *not* the
-mirroring link. **Pair your phone to the bike as a phone/audio device** and those buttons control
-Android Auto media and calls directly. Setup shows your current Bluetooth status and a shortcut to
-system Bluetooth settings.
+Touchscreen dashes (800MT, 1000 MT‑X) are driven by touch. **Non-touch dashes** (the CFDL16-class
+bikes — 450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) are driven by the **handlebar buttons**
+and an **on-screen pad** instead. Open **Controls & handlebar buttons** from the main screen.
+
+**Handlebar buttons → Android Auto.** The buttons reach the phone over **Bluetooth** (AVRCP) — *not*
+the mirroring link — so you must **pair the phone to the bike over Bluetooth** first. Turn on
+*Handlebar buttons drive Android Auto* and the defaults are:
+
+| Gesture | Default action |
+| --- | --- |
+| **▲ / ▼ press** | Rotary knob — step through the current list |
+| **Enter** | Select / OK |
+| **▼▼ (double down)** | Back |
+| **▲▲ (double up)** | Home (app list) |
+
+Every gesture is **remappable** in **Customize buttons** (knob, D-pad, select, back, home, Assistant,
+do-nothing, or *navigate to a saved place*). While the mode is on, the buttons stop skipping music
+tracks (Android gives the media buttons to one app at a time) — toggle it off for normal media
+control.
+
+**On-screen pad + Navigate to…** The Controls screen also has an on-screen D-pad, rotary knob, and a
+**"Navigate to…"** box: type an address and turn-by-turn appears on the dash, no dash interaction
+needed. Save up to three places and map them to a handlebar button for **one-press** navigation with
+the phone in your pocket (that background launch needs *Display over other apps* — the app prompts you
+when a nav button is mapped).
+
+**Voice.** Map any gesture (or tap **Voice**) to the Assistant and ask for directions through your
+helmet mic — OpenCfMoto streams the mic to Android Auto (grant the microphone permission when asked).
 
 ### 🧰 Diagnostics
 
@@ -238,6 +270,7 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | **Setup** | Permissions, Android Auto setup, display/battery, startup & recovery, Bluetooth. |
 | **Devices** | Manage paired bikes (select / add / remove). |
 | **Trip** | GPS trip computer + saved rides and route maps. |
+| **Controls & handlebar buttons** | On-screen D-pad/knob, "Navigate to…", and handlebar-button setup + remapping. |
 | **Logs** | Show/hide the live diagnostics panel (with Share / Clear). |
 
 ---
@@ -307,6 +340,9 @@ and built the Android Auto plumbing before us. Huge thanks to:
   support and profile work.
 - **[BojanJ/open-cfmoto](https://github.com/BojanJ/open-cfmoto)** — for the more complete Android Auto
   integration we built on top of.
+- **[ionutradu252/open-cfmoto](https://github.com/ionutradu252/open-cfmoto)** — for the CFDL16 / 450SR
+  work this project's handlebar-button control, on-screen D-pad/knob, navigate-to, and Assistant mic
+  were ported from.
 - **[headunit-revived](https://github.com/andreknieriem/headunit-revived)** by *andreknieriem* — the
   Android Auto (AAP) receiver foundation.
 

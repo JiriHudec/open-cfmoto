@@ -33,6 +33,7 @@ class AndroidAutoService : Service() {
 
     private var pipeline: VideoPipeline? = null
     private var receiver: AaReceiver? = null
+    private var mediaButtons: MediaButtonBridge? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var lastRecoveryAt = 0L
@@ -151,6 +152,8 @@ class AndroidAutoService : Service() {
         AaVideoBridge.onSteadyVideo = null
         try { TripLogger.current?.stopAndSave() } catch (_: Exception) {}
         try { BikeLink.prober?.stop() } catch (_: Exception) {}
+        try { mediaButtons?.stop() } catch (_: Exception) {}
+        mediaButtons = null
         try { receiver?.stop() } catch (_: Exception) {}
         receiver = null
         AaVideoBridge.pipeline = null
@@ -323,6 +326,8 @@ class AndroidAutoService : Service() {
                 it.onSessionEnded = { userExit -> onAaSessionEnded(userExit) }
                 it.start()
             }
+            // Capture the bike's handlebar buttons (Bluetooth AVRCP) → Android Auto navigation.
+            mediaButtons = MediaButtonBridge(applicationContext, LogBus::log).also { it.start() }
         } catch (e: Exception) {
             LogBus.log("[AA] receiver start failed: $e")
             stopSelf()
@@ -377,6 +382,8 @@ class AndroidAutoService : Service() {
         if (active === this) active = null
         watchdogHandler.removeCallbacksAndMessages(null)
         try { TripLogger.current?.stopAndSave() } catch (_: Exception) {}
+        try { mediaButtons?.stop() } catch (_: Exception) {}
+        mediaButtons = null
         try { receiver?.stop() } catch (_: Exception) {}
         receiver = null
         AaVideoBridge.pipeline = null

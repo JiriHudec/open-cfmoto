@@ -25,4 +25,21 @@ object AaVideoBridge {
      * pinch-to-zoom works). Null when no AA session is active (touches are then dropped).
      */
     @Volatile var touchSink: ((action: Int, pointerId: Int, canvasX: Int, canvasY: Int) -> Unit)? = null
+
+    /**
+     * Phone/handlebar D-pad → Android Auto input bridge. The on-screen buttons ([ControlsActivity])
+     * and the bike's handlebar buttons ([MediaButtonBridge]) call this with an Android keycode (see
+     * [dev.zanderp.opencfmoto.aa.AaInput] KEY_* constants); the live AA session ([AaReceiver]) installs
+     * a sink that forwards it over the AAP INPUT channel so Maps/Waze can be navigated without a
+     * touchscreen. Null when no AA session is active (presses are dropped with a log line).
+     */
+    @Volatile var keySink: ((keycode: Int) -> Unit)? = null
+
+    /**
+     * Rotary-knob → Android Auto bridge. AA treats the head unit as rotary (see AaInput.KEY_SCROLL_WHEEL),
+     * where the KNOB (not the D-pad) steps focus through list items. delta -1 = rotate back, +1 =
+     * forward. Wired to the app's ⟲/⟳ buttons and the bike's short volume presses. Null when no AA
+     * session is active.
+     */
+    @Volatile var scrollSink: ((delta: Int) -> Unit)? = null
 }
