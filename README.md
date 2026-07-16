@@ -313,6 +313,45 @@ and built the Android Auto plumbing before us. Huge thanks to:
 Thank you to everyone in the CFMoto/EasyConnect community who shared logs, captures, and findings that
 made this possible. See the [`docs/`](docs/) folder for the technical/architecture write-ups.
 
+---
+
+## 📜 License
+
+OpenCfMoto is licensed under the **[GNU Affero General Public License v3.0](LICENSE)** (AGPL-3.0-or-later).
+Copyright © 2026 **Alexandru** ([alexandru.rocks](https://alexandru.rocks)) and the OpenCfMoto
+contributors. See [`NOTICE`](NOTICE) for the full copyright and attribution breakdown.
+
+**What that means:** you're free to use, study, modify, and share the app. But if you distribute it —
+or run a modified version as a network-accessible service — you **must** release your complete
+corresponding source under the AGPL-3.0 and keep the copyright/attribution notices intact. **Nobody
+can take OpenCfMoto closed-source or ship a proprietary product built on it.**
+
+> **Why AGPL:** the Android Auto receiver (`dev.coletz.opencfmoto/aa/`) is derived from the AGPLv3
+> project [headunit-revived](https://github.com/andreknieriem/headunit-revived), so the combined work
+> is AGPL-3.0 by inheritance. This is the strongest copyleft available and is a deliberate choice to
+> keep the project — and every fork of it — open.
+
+### 💼 Commercial licensing
+
+Want to use the *original* OpenCfMoto code under terms other than the AGPL (for example, in a closed
+product)? Those contributions are owned by the copyright holder and can be **separately licensed** —
+reach out via [alexandru.rocks](https://alexandru.rocks) to discuss. Note that any AGPLv3 upstream
+components (e.g. headunit-revived) would still need to be relicensed by their authors or replaced.
+
+### 🤝 Contributing
+
+Contributions are welcome under the AGPL-3.0. By submitting a pull request you certify the
+[Developer Certificate of Origin](https://developercertificate.org/) (sign commits with `git commit -s`),
+agree that your contribution is licensed under the AGPL-3.0, and grant the project maintainer the right
+to also offer your contribution under a separate commercial license. This keeps dual-licensing possible
+without every contributor holding a veto.
+
+## 🔒 Privacy
+
+OpenCfMoto is **local-first**: no account, no analytics, no project-run servers. Bike profiles, trip
+logs, and diagnostics stay on your phone. The full permissions-and-privacy breakdown — including the
+opt-in GPS trip logging and the OpenStreetMap map tiles — is in **[PRIVACY.md](PRIVACY.md)**.
+
 <div align="center">
 
 <sub>Built with ❤️ for the CFMoto community.</sub>
