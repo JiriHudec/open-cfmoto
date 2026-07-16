@@ -326,7 +326,7 @@ or run a modified version as a network-accessible service — you **must** relea
 corresponding source under the AGPL-3.0 and keep the copyright/attribution notices intact. **Nobody
 can take OpenCfMoto closed-source or ship a proprietary product built on it.**
 
-> **Why AGPL:** the Android Auto receiver (`dev.coletz.opencfmoto/aa/`) is derived from the AGPLv3
+> **Why AGPL:** the Android Auto receiver (`dev.zanderp.opencfmoto/aa/`) is derived from the AGPLv3
 > project [headunit-revived](https://github.com/andreknieriem/headunit-revived), so the combined work
 > is AGPL-3.0 by inheritance. This is the strongest copyleft available and is a deliberate choice to
 > keep the project — and every fork of it — open.

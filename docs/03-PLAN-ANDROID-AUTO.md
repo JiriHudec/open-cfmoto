@@ -133,7 +133,7 @@ speaker / BT helmet. Reconnect/auto-start UX.
 1. Build HUR (`../headunit-revived/`, already at v3.1.1); skim `aap/`, `decoder/`, `connection/`,
    `aap/protocol/`, and locate the **loopback (non-VPN) self-mode** trigger and the localhost AAP server
    setup.
-2. Decide the module boundary: a new `dev.coletz.opencfmoto.aa` package containing the ported receiver
+2. Decide the module boundary: a new `dev.zanderp.opencfmoto.aa` package containing the ported receiver
    (transport/SSL/service-discovery/video/audio), with HUR headers preserved.
 3. Implement **M1** (receiver in-app → local SurfaceView) and get one confirmation it works before
    touching the bike path.

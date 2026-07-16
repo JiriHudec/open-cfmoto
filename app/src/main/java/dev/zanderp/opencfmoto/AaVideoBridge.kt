@@ -1,0 +1,28 @@
+package dev.zanderp.opencfmoto
+
+/**
+ * Shared hand-off between the Android Auto receiver (which owns the H.264 encoder/[VideoPipeline]
+ * fed by AA's decoded video) and [EasyConnProber] (the bike PXC pipeline that pulls encoded
+ * frames). When [pipeline] is non-null, the prober uses it as the video source instead of
+ * creating its own Presentation/mirror pipeline — this is how Android Auto reaches the dash.
+ */
+object AaVideoBridge {
+    @Volatile var pipeline: VideoPipeline? = null
+
+    /**
+     * Fired once (by the AA receiver) when decoded Android Auto video reaches a steady frame
+     * rate — MainActivity uses this to auto-open the bike QR scanner so the AA→bike hand-off
+     * doesn't depend on the user remembering to scan after starting the receiver.
+     */
+    @Volatile var onSteadyVideo: (() -> Unit)? = null
+
+    /**
+     * Bike-touchscreen → Android Auto input bridge. [EasyConnProber] decodes the dash's touch frames
+     * (PXC media cmdType 32) and calls this with the raw bike-canvas coordinates, the finger index
+     * ([pointerId], 0/1 — the CFDL26 dash reports two-finger multi-touch), and a normalised action
+     * (0=DOWN, 1=UP, 2=MOVE). The live AA session ([AaReceiver]) installs a sink that letterbox-maps
+     * the point into AA's video space and sends it over the AAP INPUT channel (as multi-touch, so
+     * pinch-to-zoom works). Null when no AA session is active (touches are then dropped).
+     */
+    @Volatile var touchSink: ((action: Int, pointerId: Int, canvasX: Int, canvasY: Int) -> Unit)? = null
+}

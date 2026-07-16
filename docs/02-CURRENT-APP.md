@@ -1,6 +1,6 @@
 # Current App — OpenCfMoto Architecture & State
 
-Package `dev.coletz.opencfmoto`. Kotlin, `minSdk 29`, `targetSdk 36`. Gradle version catalog at
+Package `dev.zanderp.opencfmoto`. Kotlin, `minSdk 29`, `targetSdk 36`. Gradle version catalog at
 `gradle/libs.versions.toml`. Deps: AppCompat/Material, CameraX + ML Kit barcode (QR), JmDNS (mDNS),
 constraintlayout, **protobuf + Conscrypt** (for the embedded Android Auto receiver). The HUR-derived
 Android Auto stack lives under `aa/` (see below).
@@ -30,7 +30,7 @@ The old mirror-path limitations (occupies the phone, dies on lock, single-app ca
 **superseded** by the embedded receiver (#7) — mirror mode still exists as a fallback but isn't the path
 for Android Auto anymore.
 
-## Source files (all under `app/src/main/java/dev/coletz/opencfmoto/`)
+## Source files (all under `app/src/main/java/dev/zanderp/opencfmoto/`)
 
 ### Bike / PXC pipeline (the working core — DO NOT rewrite; you'll only swap the video source)
 - **`EasyConnProber.kt`** — the heart. Resolves IPs, binds servers on 10920/10921/10922, sends the

@@ -62,7 +62,7 @@ emulator. Full plan in `03-PLAN-ANDROID-AUTO.md`.
 
 ## Coding conventions (match the existing app)
 
-- Kotlin, `minSdk 29`, `targetSdk 36`, package `dev.coletz.opencfmoto`.
+- Kotlin, `minSdk 29`, `targetSdk 36`, package `dev.zanderp.opencfmoto`.
 - Everything user-visible/diagnostic goes through the `log: (String) -> Unit` callback threaded into
   each component (see `EasyConnProber`, `VideoPipeline`). Prefix logs with a stage tag, e.g. `[AA]`,
   `[VIDEO]`, `[:10922]`.

@@ -34,7 +34,7 @@ Copyright is held by the respective authors of each contribution:
     documentation): Copyright (C) 2026 Alexandru <https://alexandru.rocks> and
     the OpenCfMoto contributors.
 
-  * Android Auto Projection receiver (the `dev.coletz.opencfmoto.aa` package):
+  * Android Auto Projection receiver (the `dev.zanderp.opencfmoto.aa` package):
     portions Copyright (C) their original authors, ported from headunit-revived
     (see below). These files retain their original AGPLv3 attribution headers.
 
@@ -46,7 +46,7 @@ Incorporated code (bundled in this repository)
 --------------------------------------------------------------------------------
 
 headunit-revived — AGPL-3.0
-  The `dev.coletz.opencfmoto.aa` package (AAP transport, SSL handshake, message
+  The `dev.zanderp.opencfmoto.aa` package (AAP transport, SSL handshake, message
   handling, video decoder, protobuf message definitions, and related helpers) is
   ported and adapted from the headunit-revived project.
   Original work Copyright (C) the headunit lineage authors — including the
