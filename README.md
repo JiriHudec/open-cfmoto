@@ -11,7 +11,7 @@ every ride — all from an Android phone in your pocket.
 
 <img src="docs/screenshots/01_main.png" width="240" alt="Home screen"/>&nbsp;
 <img src="docs/screenshots/02_setup.png" width="240" alt="Setup — display"/>&nbsp;
-<img src="docs/screenshots/04_trip.png" width="240" alt="Trip computer"/>
+<img src="docs/screenshots/09_trip_map.png" width="240" alt="Logged ride on the map"/>
 
 <br/><br/>
 
@@ -126,8 +126,6 @@ launch whenever the bike's Wi‑Fi is in range.
 
 ### 🛰️ Trip computer & ride logging
 
-<img src="docs/screenshots/04_trip.png" width="240" align="right" alt="Trip computer"/>
-
 The **Trip** screen is a GPS-driven ride computer showing live speed, distance, duration, and
 max/avg speed. Speed/distance come from the phone's GPS (the bike doesn't share telemetry over the
 mirroring link).
@@ -137,6 +135,12 @@ mirroring link).
 - **Saved trips** — tap **Saved trips** to browse past rides with their stats; tap one to see its
   **route on a map** (OpenStreetMap), or long-press to delete.
 - Manual **Start / Pause / Reset** controls are there too.
+
+<p>
+<img src="docs/screenshots/04_trip.png" width="220" alt="Trip computer"/>&nbsp;
+<img src="docs/screenshots/08_trips.png" width="220" alt="Saved trips"/>&nbsp;
+<img src="docs/screenshots/09_trip_map.png" width="220" alt="Ride route on the map"/>
+</p>
 
 <br clear="all"/>
 
