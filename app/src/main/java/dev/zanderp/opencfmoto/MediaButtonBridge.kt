@@ -19,6 +19,7 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.KeyEvent
 import dev.zanderp.opencfmoto.aa.AaInput
@@ -146,6 +147,10 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
                 if (on) takeMediaFocus() else releaseMediaFocus()
                 session?.isActive = on
                 if (on) pinVolume() else unpinVolume()
+                if (!on) {
+                    selectDownAt = 0L   // drop any half-finished press when handing buttons back
+                    cancelPendingTaps()
+                }
                 log("[BTN] capture ${if (on) "ON — bike buttons drive Android Auto (music pauses)" else "OFF — buttons control media/volume"}")
             } catch (e: Exception) {
                 log("[BTN] setCaptureActive failed: $e")
@@ -192,7 +197,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             session?.setMetadata(
                 MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, "Android Auto control")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ / ▲ ▼ navigate · Enter selects")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ / ▲ ▼ navigate · Enter selects · hold = voice")
                     .putString(MediaMetadata.METADATA_KEY_ALBUM, "OpenCfMoto")
                     .putLong(MediaMetadata.METADATA_KEY_DURATION, TRACK_MS)
                     .build()
@@ -364,12 +369,12 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
      * Decide between a single press and a double-tap. A double-tap doesn't always arrive as one big
      * event: volume dashes that coalesce it are handled by [forceDouble] (fired instantly, no wait);
      * dashes that send two separate presses — and the discrete Select play/pause — are caught by
-     * waiting [DOUBLE_TAP_WINDOW_MS] for a second same-channel tap. A single press therefore fires
-     * only after that window, which is the cost of telling the two apart.
+     * waiting [ButtonTimingPrefs.doubleTapMs] for a second same-channel tap. A single press therefore
+     * fires only after that window, which is the cost of telling the two apart.
      */
     private fun detectDoubleTap(single: ButtonGesture, double: ButtonGesture, forceDouble: Boolean) {
         val ch = taps.getOrPut(single) { Tap() }
-        val now = android.os.SystemClock.uptimeMillis()
+        val now = SystemClock.uptimeMillis()
         // Drop a hardware echo of the SAME physical press (e.g. onPlay + onMediaButtonEvent both fire).
         if (!forceDouble && now - ch.lastAt < SELECT_ECHO_REFRACTORY_MS) { ch.lastAt = now; return }
         ch.lastAt = now
@@ -380,7 +385,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
         } else {
             val r = Runnable { ch.pending = null; run(single) }
             ch.pending = r
-            handler.postDelayed(r, DOUBLE_TAP_WINDOW_MS)
+            handler.postDelayed(r, ButtonTimingPrefs.doubleTapMs(context))
         }
     }
 
@@ -432,45 +437,81 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
     private val callback = object : MediaSession.Callback() {
         override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
             @Suppress("DEPRECATION")
-            val ke = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-            if (ke != null && ke.action == KeyEvent.ACTION_DOWN) {
-                log("[BTN] media key ${KeyEvent.keyCodeToString(ke.keyCode)} (code=${ke.keyCode})")
-                forward(ke.keyCode)
+            val ke = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return true
+            when (ke.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    val repeat = if (ke.repeatCount > 0) " repeat=${ke.repeatCount}" else ""
+                    log("[BTN] media key ${KeyEvent.keyCodeToString(ke.keyCode)} down (code=${ke.keyCode})$repeat")
+                    onKeyDown(ke.keyCode)
+                }
+                KeyEvent.ACTION_UP -> onKeyUp(ke.keyCode)
             }
             return true
         }
-        // Fallbacks: the bike takes the raw-key path above; other dashes / BT remotes may dispatch here.
+        // Fallbacks: the bike takes the raw-key path above; other dashes / BT remotes may dispatch
+        // here. These carry no hold timing, so they can only ever be a short press / double-tap.
         override fun onPlay() = selectPressed()
         override fun onPause() = selectPressed()
     }
 
+    /** elapsedRealtime of the select button's key-down while it's held; 0 when nothing is pressed. */
+    private var selectDownAt = 0L
+
+    private fun isSelectKey(keyCode: Int) = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+        KeyEvent.KEYCODE_MEDIA_PLAY,
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> true
+        else -> false
+    }
+
     /**
-     * Map a raw media keycode to a gesture:
-     *   • play/pause → enter (select) — every dash sends this on the enter/OK button.
-     *   • next-/previous-track → the ▶/◀ presses of the 800MT's 5-way joystick (verified on hardware:
-     *     right = KEYCODE_MEDIA_NEXT, left = KEYCODE_MEDIA_PREVIOUS). The 3-button CFDL16 dashes never
+     * Map a raw media key-down to a gesture:
+     *   • play/pause → the enter/OK button. We don't fire yet: a tap becomes [SELECT_PRESS] /
+     *     [SELECT_DOUBLE] and a hold becomes [SELECT_LONG], decided on key-up (see [onKeyUp]).
+     *   • next-/previous-track → the ▶/◀ presses of the 800MT's 5-way joystick. These go through
+     *     [detectDoubleTap] (discrete keys have no coalesced jump). The 3-button CFDL16 dashes never
      *     emit these, so wiring them up is harmless there.
-     * All three go through [detectDoubleTap]: the 800MT sends discrete key events (not the volume
-     * writes the CFDL16 dashes use), so its double-taps can only be told apart by timing, exactly like
-     * Select. A single press therefore fires after [DOUBLE_TAP_WINDOW_MS].
      * Anything else is logged and dropped — aliasing an unknown key onto a real action would be a
      * nasty surprise when that action is "navigate home".
      */
-    private fun forward(keyCode: Int) {
-        when (keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-            KeyEvent.KEYCODE_MEDIA_PLAY,
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> selectPressed()
-            KeyEvent.KEYCODE_MEDIA_NEXT,
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ->
+    private fun onKeyDown(keyCode: Int) {
+        when {
+            isSelectKey(keyCode) -> {
+                if (selectDownAt == 0L) selectDownAt = SystemClock.elapsedRealtime()
+            }
+            keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
+                keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ->
                 detectDoubleTap(ButtonGesture.NAV_FWD, ButtonGesture.NAV_FWD_DOUBLE, forceDouble = false)
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-            KeyEvent.KEYCODE_MEDIA_REWIND ->
+            keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS ||
+                keyCode == KeyEvent.KEYCODE_MEDIA_REWIND ->
                 detectDoubleTap(ButtonGesture.NAV_BACK, ButtonGesture.NAV_BACK_DOUBLE, forceDouble = false)
         }
     }
 
-    /** One press of the OK / ★ button (from either the raw-key path or onPlay/onPause). */
+    /**
+     * Select button released: hold past [ButtonTimingPrefs.longPressMs] → [SELECT_LONG]; otherwise
+     * feed the short press into [detectDoubleTap] so Select ×2 still works. An UP with no matching
+     * DOWN falls back to a short press so select never silently no-ops.
+     */
+    private fun onKeyUp(keyCode: Int) {
+        if (!isSelectKey(keyCode)) return
+        val downAt = selectDownAt
+        selectDownAt = 0L
+        if (downAt == 0L) { selectPressed(); return }
+        val heldMs = SystemClock.elapsedRealtime() - downAt
+        val long = heldMs >= ButtonTimingPrefs.longPressMs(context)
+        log("[BTN] select held ${heldMs}ms → ${if (long) "long press" else "tap"}")
+        if (long) {
+            // A hold is never a double-tap — cancel any pending Select single from an earlier tap.
+            taps[ButtonGesture.SELECT_PRESS]?.pending?.let(handler::removeCallbacks)
+            taps[ButtonGesture.SELECT_PRESS]?.pending = null
+            run(ButtonGesture.SELECT_LONG)
+        } else {
+            selectPressed()
+        }
+    }
+
+    /** One short press of the OK / ★ button (from key-up, or onPlay/onPause fallbacks). */
     private fun selectPressed() =
         detectDoubleTap(ButtonGesture.SELECT_PRESS, ButtonGesture.SELECT_DOUBLE, forceDouble = false)
 
@@ -486,13 +527,6 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
          */
         private const val DOUBLE_TAP_STEPS = 3
 
-        /**
-         * How long to wait for a second same-direction tap before committing to a single press. Dashes
-         * that send a double-tap as two separate volume writes (rather than one coalesced jump), and
-         * the discrete Select play/pause, are caught here. Longer = more forgiving doubles but laggier
-         * singles; ~300 ms is the usual single-vs-double sweet spot.
-         */
-        private const val DOUBLE_TAP_WINDOW_MS = 300L
         /**
          * A single physical press can echo (e.g. onPlay + onMediaButtonEvent both fire). Two taps this
          * close together are treated as one press, not a double. Keep it well under a real double-tap.

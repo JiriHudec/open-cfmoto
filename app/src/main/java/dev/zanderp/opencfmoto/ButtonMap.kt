@@ -51,8 +51,11 @@ enum class ButtonAction(val id: String, val label: String) {
  *     coalesced volume write with a bigger jump, or two quick writes inside a short window; on the
  *     800MT's discrete track keys it is a second key event inside that same window (see
  *     [MediaButtonBridge]). Either way, two quick presses = the ×2 gesture.
- *   • **Select / Select ×2** — the OK / ★ (start) button, which every dash sends as an AVRCP
- *     play/pause; a second press within the window is the double-tap.
+ *   • **Select / Select ×2 / Select (hold)** — the OK / ★ (start) button, which every dash sends as
+ *     an AVRCP play/pause. A quick tap (after the double-tap window) is [SELECT_PRESS]; a second
+ *     press within the window is [SELECT_DOUBLE]; holding past the long-press threshold is
+ *     [SELECT_LONG]. Hold timing needs a distinct key-up, so it only works on dashes that send a
+ *     release (the ▲/▼ volume path has no release event).
  *
  * [label] is the semantic name (with the physical buttons that trigger it); [hint] explains it.
  */
@@ -64,7 +67,8 @@ enum class ButtonGesture(
 ) {
     NAV_BACK("navBack", "Backward  ◀ / ▲", "◀ left, or the ▲ volume press on non-touch dashes", ButtonAction.KNOB_BACK),
     NAV_FWD("navFwd", "Forward  ▶ / ▼", "▶ right, or the ▼ volume press on non-touch dashes", ButtonAction.KNOB_FORWARD),
-    SELECT_PRESS("selectPress", "Select  Enter / ★", "the OK / ★ start button (dash sends play-pause)", ButtonAction.SELECT),
+    SELECT_PRESS("selectPress", "Select  Enter / ★", "a quick tap of the OK / ★ start button", ButtonAction.SELECT),
+    SELECT_LONG("selectLong", "Select (hold)  Enter / ★", "press and hold the OK / ★ button", ButtonAction.ASSISTANT),
     NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward within a short window", ButtonAction.HOME),
     NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward within a short window", ButtonAction.BACK),
     SELECT_DOUBLE("selectDouble", "Select ×2", "double-tap the OK / ★ button", ButtonAction.ASSISTANT),

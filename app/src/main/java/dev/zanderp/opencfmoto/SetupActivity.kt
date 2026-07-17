@@ -35,6 +35,8 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var powerDesc: TextView
     private lateinit var resDesc: TextView
     private lateinit var themeDesc: TextView
+    private lateinit var dblTapDesc: TextView
+    private lateinit var holdDesc: TextView
     private lateinit var btStatus: TextView
     private lateinit var resumeBtn: MaterialButton
 
@@ -58,6 +60,8 @@ class SetupActivity : AppCompatActivity() {
         powerDesc = findViewById(R.id.power_desc)
         resDesc = findViewById(R.id.res_desc)
         themeDesc = findViewById(R.id.theme_desc)
+        dblTapDesc = findViewById(R.id.dbltap_desc)
+        holdDesc = findViewById(R.id.hold_desc)
         btStatus = findViewById(R.id.bt_status)
         resumeBtn = findViewById(R.id.resume_perm_btn)
 
@@ -83,6 +87,12 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.theme_auto).setOnClickListener { setMapTheme(MapTheme.AUTO) }
         findViewById<MaterialButton>(R.id.theme_day).setOnClickListener { setMapTheme(MapTheme.DAY) }
         findViewById<MaterialButton>(R.id.theme_night).setOnClickListener { setMapTheme(MapTheme.NIGHT) }
+        findViewById<MaterialButton>(R.id.dbltap_fast).setOnClickListener { setDoubleTap(DoubleTapDelay.FAST) }
+        findViewById<MaterialButton>(R.id.dbltap_normal).setOnClickListener { setDoubleTap(DoubleTapDelay.NORMAL) }
+        findViewById<MaterialButton>(R.id.dbltap_slow).setOnClickListener { setDoubleTap(DoubleTapDelay.SLOW) }
+        findViewById<MaterialButton>(R.id.hold_short).setOnClickListener { setLongPress(LongPressDelay.SHORT) }
+        findViewById<MaterialButton>(R.id.hold_normal).setOnClickListener { setLongPress(LongPressDelay.NORMAL) }
+        findViewById<MaterialButton>(R.id.hold_long).setOnClickListener { setLongPress(LongPressDelay.LONG) }
         findViewById<MaterialButton>(R.id.autoconnect_on).setOnClickListener { setAutoConnect(true) }
         findViewById<MaterialButton>(R.id.autoconnect_off).setOnClickListener { setAutoConnect(false) }
         findViewById<MaterialButton>(R.id.recovery_on).setOnClickListener { setAutoRecovery(true) }
@@ -130,6 +140,19 @@ class SetupActivity : AppCompatActivity() {
         Toast.makeText(this, "Map theme: ${theme.label}", Toast.LENGTH_SHORT).show()
     }
 
+    /** Button timing applies live — the next press uses the new window. */
+    private fun setDoubleTap(delay: DoubleTapDelay) {
+        ButtonTimingPrefs.setDoubleTap(this, delay)
+        refreshOptions()
+        Toast.makeText(this, "Double-tap delay: ${delay.label}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun setLongPress(delay: LongPressDelay) {
+        ButtonTimingPrefs.setLongPress(this, delay)
+        refreshOptions()
+        Toast.makeText(this, "Select hold delay: ${delay.label}", Toast.LENGTH_SHORT).show()
+    }
+
     private fun setAutoConnect(on: Boolean) {
         AppSettings.setAutoConnect(this, on)
         refreshOptions()
@@ -158,11 +181,15 @@ class SetupActivity : AppCompatActivity() {
         val power = VideoPrefs.power(this)
         val res = VideoPrefs.resolution(this)
         val theme = NightPrefs.theme(this)
+        val dbl = ButtonTimingPrefs.doubleTap(this)
+        val hold = ButtonTimingPrefs.longPress(this)
         qualityDesc.text = quality.label
         fitDesc.text = fit.label
         powerDesc.text = power.label
         resDesc.text = res.label
         themeDesc.text = theme.label
+        dblTapDesc.text = dbl.label
+        holdDesc.text = hold.label
 
         highlight(quality,
             R.id.quality_smooth to VideoQuality.SMOOTH,
@@ -186,6 +213,14 @@ class SetupActivity : AppCompatActivity() {
             R.id.theme_auto to MapTheme.AUTO,
             R.id.theme_day to MapTheme.DAY,
             R.id.theme_night to MapTheme.NIGHT)
+        highlight(dbl,
+            R.id.dbltap_fast to DoubleTapDelay.FAST,
+            R.id.dbltap_normal to DoubleTapDelay.NORMAL,
+            R.id.dbltap_slow to DoubleTapDelay.SLOW)
+        highlight(hold,
+            R.id.hold_short to LongPressDelay.SHORT,
+            R.id.hold_normal to LongPressDelay.NORMAL,
+            R.id.hold_long to LongPressDelay.LONG)
 
         highlight(AppSettings.autoConnect(this),
             R.id.autoconnect_on to true,

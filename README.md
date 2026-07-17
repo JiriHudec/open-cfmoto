@@ -306,14 +306,16 @@ the mirroring link — so you must **pair the phone to the bike over Bluetooth**
 | --- | --- |
 | **Backward** — ◀ left, or ▲ volume on non-touch dashes | Rotary knob back (previous item) |
 | **Forward** — ▶ right, or ▼ volume on non-touch dashes | Rotary knob forward (next item) |
-| **Select** — Enter / ★ (start) button | Select / OK |
+| **Select** — Enter / ★ (start) button, quick tap | Select / OK |
+| **Select (hold)** — press and hold Enter / ★ | Assistant (voice) |
 | **Backward ×2** (double-tap Backward) | Home (app list) |
 | **Forward ×2** (double-tap Forward) | Back |
 | **Select ×2** (double-tap Enter / ★) | Assistant (voice) |
 
 The mapping is by **meaning, not by physical button**: the app auto-routes whatever your bike
 sends — the 450SR's ▲/▼ volume, or the 800MT's ◀/▶ track keys — into the same Backward / Forward /
-Select gestures, so one setup works across bikes.
+Select gestures, so one setup works across bikes. If double-taps feel too slow or too picky, tweak
+**Handlebar double-tap delay** / **Select hold delay** in Setup (200–450 ms / 500–800 ms).
 
 Every gesture is **remappable** in **Customize buttons** (knob, D-pad, select, back, home, Assistant,
 do-nothing, or *navigate to a saved place*). While the mode is on, the buttons stop skipping music
