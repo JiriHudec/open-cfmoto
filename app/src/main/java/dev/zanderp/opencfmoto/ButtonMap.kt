@@ -47,10 +47,12 @@ enum class ButtonAction(val id: String, val label: String) {
  *   • **Backward / Forward** — the CFDL16 dashes (450SR etc.) send these as ▲/▼ *volume* writes;
  *     the 800MT's 5-way sends them as ◀/▶ *previous-/next-track*. Either way ◀/▲ = backward and
  *     ▶/▼ = forward.
- *   • **Backward/Forward ×2** — a double-tap. Only the volume dashes can signal it (one coalesced
- *     volume write with a bigger jump); the 800MT's discrete track keys just repeat the single step,
- *     so these rows are effectively non-touch-dash only.
- *   • **Select** — the OK / ★ (start) button, which every dash sends as an AVRCP play/pause.
+ *   • **Backward/Forward ×2** — a double-tap. On the CFDL16 volume dashes it is read from one
+ *     coalesced volume write with a bigger jump, or two quick writes inside a short window; on the
+ *     800MT's discrete track keys it is a second key event inside that same window (see
+ *     [MediaButtonBridge]). Either way, two quick presses = the ×2 gesture.
+ *   • **Select / Select ×2** — the OK / ★ (start) button, which every dash sends as an AVRCP
+ *     play/pause; a second press within the window is the double-tap.
  *
  * [label] is the semantic name (with the physical buttons that trigger it); [hint] explains it.
  */
@@ -63,8 +65,9 @@ enum class ButtonGesture(
     NAV_BACK("navBack", "Backward  ◀ / ▲", "◀ left, or the ▲ volume press on non-touch dashes", ButtonAction.KNOB_BACK),
     NAV_FWD("navFwd", "Forward  ▶ / ▼", "▶ right, or the ▼ volume press on non-touch dashes", ButtonAction.KNOB_FORWARD),
     SELECT_PRESS("selectPress", "Select  Enter / ★", "the OK / ★ start button (dash sends play-pause)", ButtonAction.SELECT),
-    NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward — non-touch dashes only", ButtonAction.HOME),
-    NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward — non-touch dashes only", ButtonAction.BACK),
+    NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward within a short window", ButtonAction.HOME),
+    NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward within a short window", ButtonAction.BACK),
+    SELECT_DOUBLE("selectDouble", "Select ×2", "double-tap the OK / ★ button", ButtonAction.ASSISTANT),
 }
 
 /**
