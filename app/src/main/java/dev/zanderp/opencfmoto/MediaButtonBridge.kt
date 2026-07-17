@@ -450,6 +450,9 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
      *   • next-/previous-track → the ▶/◀ presses of the 800MT's 5-way joystick (verified on hardware:
      *     right = KEYCODE_MEDIA_NEXT, left = KEYCODE_MEDIA_PREVIOUS). The 3-button CFDL16 dashes never
      *     emit these, so wiring them up is harmless there.
+     * All three go through [detectDoubleTap]: the 800MT sends discrete key events (not the volume
+     * writes the CFDL16 dashes use), so its double-taps can only be told apart by timing, exactly like
+     * Select. A single press therefore fires after [DOUBLE_TAP_WINDOW_MS].
      * Anything else is logged and dropped — aliasing an unknown key onto a real action would be a
      * nasty surprise when that action is "navigate home".
      */
@@ -459,9 +462,11 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             KeyEvent.KEYCODE_MEDIA_PLAY,
             KeyEvent.KEYCODE_MEDIA_PAUSE -> selectPressed()
             KeyEvent.KEYCODE_MEDIA_NEXT,
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> run(ButtonGesture.NAV_FWD)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ->
+                detectDoubleTap(ButtonGesture.NAV_FWD, ButtonGesture.NAV_FWD_DOUBLE, forceDouble = false)
             KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-            KeyEvent.KEYCODE_MEDIA_REWIND -> run(ButtonGesture.NAV_BACK)
+            KeyEvent.KEYCODE_MEDIA_REWIND ->
+                detectDoubleTap(ButtonGesture.NAV_BACK, ButtonGesture.NAV_BACK_DOUBLE, forceDouble = false)
         }
     }
 

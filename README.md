@@ -307,8 +307,8 @@ the mirroring link — so you must **pair the phone to the bike over Bluetooth**
 | **Backward** — ◀ left, or ▲ volume on non-touch dashes | Rotary knob back (previous item) |
 | **Forward** — ▶ right, or ▼ volume on non-touch dashes | Rotary knob forward (next item) |
 | **Select** — Enter / ★ (start) button | Select / OK |
-| **Backward ×2** (double-tap, non-touch dashes) | Home (app list) |
-| **Forward ×2** (double-tap, non-touch dashes) | Back |
+| **Backward ×2** (double-tap Backward) | Home (app list) |
+| **Forward ×2** (double-tap Forward) | Back |
 | **Select ×2** (double-tap Enter / ★) | Assistant (voice) |
 
 The mapping is by **meaning, not by physical button**: the app auto-routes whatever your bike
