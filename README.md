@@ -13,6 +13,8 @@ every ride — all from an Android phone in your pocket.
 
 **💬 Questions, logs, or a new bike to add? [Join the Open CFMoto Discord](https://discord.gg/xRt5yZy2U).**
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20project-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/alexandrupopa)
+
 <br/>
 
 <img src="docs/screenshots/01_main.png" width="240" alt="Home screen"/>&nbsp;
@@ -411,6 +413,8 @@ notes across bikes/phones, share captures that help add new dash profiles, and h
 <div align="center">
 
 [![Join the Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/xRt5yZy2U)
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20project-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/alexandrupopa)
 
 </div>
 
