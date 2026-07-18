@@ -38,6 +38,9 @@ class AndroidAutoService : Service() {
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var lastRecoveryAt = 0L
 
+    // Adaptive video tuning (PowerMode.AUTO): thermal + link-driven bitrate/fps, run each watchdog tick.
+    private val adaptive by lazy { AdaptiveVideoController(applicationContext, LogBus::log) }
+
     // Hybrid reconnect supervisor state (see tickReconnectSupervisor / parkAa / doResume).
     @Volatile private var aaParked = false          // AA torn down to save battery while bike is gone
     @Volatile private var sawStream = false         // we reached STREAMING at least once this session
@@ -74,6 +77,7 @@ class AndroidAutoService : Service() {
                 if (!isRunning) return
                 try { tickReconnectSupervisor() } catch (_: Exception) {}
                 try { tickWatchdog() } catch (_: Exception) {}
+                try { adaptive.onTick(pipeline) } catch (_: Exception) {}
                 try { tickTripLogging() } catch (_: Exception) {}
                 watchdogHandler.postDelayed(this, WATCHDOG_TICK_MS)
             }
@@ -322,6 +326,7 @@ class AndroidAutoService : Service() {
             }
             pipeline = vp
             AaVideoBridge.pipeline = vp
+            adaptive.reset()   // fresh session: start adaptation from the user's target
             receiver = AaReceiver(applicationContext, surface, LogBus::log).also {
                 it.onSessionEnded = { userExit -> onAaSessionEnded(userExit) }
                 it.start()

@@ -35,10 +35,17 @@ enum class ScreenFit(val label: String) {
  * frame is one fewer GPU composite + hardware encode + Wi-Fi transmit, so lowering it directly cuts
  * heat and battery drain. Below the cap the map still looks fluid; the trade is a touch less
  * smoothness on fast pans. Independent of the idle keep-alive (which drops far lower still).
+ *
+ * [AUTO] hands frame rate AND bitrate to [AdaptiveVideoController]: it starts smooth and steps both
+ * down as the phone heats up (thermal status) or the bike Wi-Fi link congests (dropped frames),
+ * then recovers as conditions ease — so the dash stays connected and smooth-at-a-lower-rate instead
+ * of stuttering or dropping. [fps] here is the *starting* cap the controller adapts from. The fixed
+ * modes disable the controller entirely and pin the rate, exactly as before.
  */
 enum class PowerMode(val fps: Int, val label: String) {
+    AUTO(30, "Auto — adapts to heat & signal (recommended)"),
     SMOOTH(30, "Smooth — 30 fps (most battery)"),
-    BALANCED(24, "Balanced — 24 fps (recommended)"),
+    BALANCED(24, "Balanced — 24 fps"),
     SAVER(20, "Battery saver — 20 fps (coolest)"),
 }
 
@@ -100,8 +107,8 @@ object VideoPrefs {
     }
 
     fun power(ctx: Context): PowerMode {
-        val name = BikeScope.getString(prefs(ctx), ctx, KEY_POWER, PowerMode.BALANCED.name)
-        return runCatching { PowerMode.valueOf(name!!) }.getOrDefault(PowerMode.BALANCED)
+        val name = BikeScope.getString(prefs(ctx), ctx, KEY_POWER, PowerMode.AUTO.name)
+        return runCatching { PowerMode.valueOf(name!!) }.getOrDefault(PowerMode.AUTO)
     }
 
     fun setPower(ctx: Context, mode: PowerMode) {

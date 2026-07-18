@@ -587,11 +587,20 @@
                     android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/power_smooth"
+                        android:id="@+id/power_auto"
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:text="Auto" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/power_smooth"
+                        style="@style/Widget.OpenCfMoto.Segment"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
                         android:layout_weight="1"
                         android:text="Smooth" />
 

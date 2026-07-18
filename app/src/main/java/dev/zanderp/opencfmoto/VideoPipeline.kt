@@ -63,6 +63,16 @@ class VideoPipeline(
     private var encoderH = 0
     @Volatile private var running = false
 
+    // The bitrate the encoder was configured with (the user's target). Adaptive tuning scales DOWN
+    // from this; it is the ceiling. 0 until the encoder is created.
+    @Volatile private var baseBitrate = 0
+    // The bitrate currently applied to the running encoder (via live setParameters).
+    @Volatile private var currentBitrate = 0
+    // Monotonic count of encoded frames dropped because the queue was full (the bike couldn't pull
+    // them fast enough). A rising count is the downstream-congestion signal the adaptive controller
+    // uses to back the bitrate off. See [droppedFramesTotal] and [AdaptiveVideoController].
+    @Volatile private var droppedFrames = 0L
+
     private val frameQueue = LinkedBlockingDeque<ByteArray>(8)
     @Volatile private var codecConfig: ByteArray? = null   // SPS/PPS
     // When set, the drain loop discards encoder output until the next keyframe, so the first frame a
@@ -122,7 +132,13 @@ class VideoPipeline(
                 // Surface-input encoders only emit on new buffers; a STATIC screen (e.g. mirror of
                 // an idle app) then produces zero frames and the bike times out. Repeat the last
                 // frame if nothing new arrives so output is continuous even when the screen is still.
-                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L) // 100ms → ≥10fps floor
+                // The floor is deliberately LOW frequency: AaCompositor already re-emits a static
+                // frame every ~2s (IDLE_REDRAW_MS) to hold the bike's ~9s media-socket timeout, so the
+                // encoder only needs a backstop below that timeout — not a 10fps re-encode of an
+                // unchanging map, which was pure wasted heat/battery (see docs/06-OPTIMIZATION-IDEAS.md
+                // idea 5). At real frame rates the compositor delivers new buffers well before this
+                // fires, so it never caps motion.
+                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, IDLE_ENCODER_REPEAT_US)
                 // Force strictly-ascending output with no B-frame reordering: the bike wire format
                 // sends raw access units with NO timestamps, so a decoder that received reordered
                 // (B-)frames could never reassemble display order → black/garbage. Baseline already
@@ -152,6 +168,7 @@ class VideoPipeline(
             inputSurface = c.createInputSurface()
             c.start()
             codec = c
+            baseBitrate = bitrate; currentBitrate = bitrate
             encoderW = w; encoderH = h
             log("[VIDEO] encoder started ${w}x${h} h264 ${profile.videoFrameRate}fps ${bitrate / 1000}kbps (${VideoPrefs.get(context).name.lowercase()})")
             maybeStartDump()
@@ -281,10 +298,13 @@ class VideoPipeline(
                         if (isKey) awaitKeyframe = false
                         val out = if (isKey && codecConfig != null) codecConfig!! + bytes else bytes
                         writeDump(out)
-                        // Keep the queue fresh: if full, drop oldest so we never lag far behind.
+                        // Keep the queue fresh: if full, drop oldest so we never lag far behind. A
+                        // sustained drop rate means the bike can't pull as fast as we encode
+                        // (downstream/Wi-Fi congestion) — counted for the adaptive controller.
                         if (!frameQueue.offerLast(out)) {
                             frameQueue.pollFirst()
                             frameQueue.offerLast(out)
+                            droppedFrames++
                         }
                     }
                 }
@@ -300,6 +320,46 @@ class VideoPipeline(
      * after [start].
      */
     fun encoderInputSurface(): android.view.Surface? = inputSurface
+
+    /**
+     * The bitrate the encoder was configured with (the user's target for this session). This is the
+     * ceiling the adaptive controller scales down from; 0 before the encoder exists.
+     */
+    fun targetBitrate(): Int = baseBitrate
+
+    /** Monotonic count of encoded frames dropped due to a full queue (downstream congestion signal). */
+    fun droppedFramesTotal(): Long = droppedFrames
+
+    /**
+     * Live-adjust the running encoder's target bitrate (no codec re-create) via [MediaCodec.setParameters].
+     * Used by [AdaptiveVideoController] to shed bits when the phone is hot or the Wi-Fi link is
+     * congested, and to restore them as conditions recover. Clamped to (0, [baseBitrate]] so it can
+     * never exceed the user's chosen target. No-op if unchanged or the encoder isn't up yet.
+     */
+    fun setEncoderBitrate(bps: Int) {
+        val c = codec ?: return
+        if (baseBitrate <= 0) return
+        val clamped = bps.coerceIn(1, baseBitrate)
+        if (clamped == currentBitrate) return
+        try {
+            c.setParameters(android.os.Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, clamped)
+            })
+            currentBitrate = clamped
+            log("[VIDEO] bitrate → ${clamped / 1000}kbps (target ${baseBitrate / 1000}kbps)")
+        } catch (e: Exception) {
+            log("[VIDEO] setEncoderBitrate failed: $e")
+        }
+    }
+
+    /**
+     * Live-adjust how many frames/sec the compositor pushes into the encoder (compositor mode only).
+     * Delegates to [AaCompositor.setFrameCap]; used by [AdaptiveVideoController] to drop the rate as
+     * the phone heats up. No-op outside compositor mode.
+     */
+    fun setFrameCap(fps: Int) {
+        aaCompositor?.setFrameCap(fps)
+    }
 
     /** Compositor mode: the surface the AA decoder renders into (letterboxed before the encoder). */
     fun decoderInputSurface(): android.view.Surface? = aaCompositor?.inputSurface
@@ -407,6 +467,15 @@ class VideoPipeline(
     }
 
     companion object {
+        /**
+         * Encoder's static-screen frame-repeat floor (µs). Must stay comfortably under the bike's ~9s
+         * media-socket timeout so an unchanging map still holds the link, but far slower than the old
+         * 100ms/10fps value which re-encoded a still screen ~10× more than needed. AaCompositor's ~2s
+         * idle redraw is the primary keep-alive; this is the encoder-side backstop. See idea 5 in
+         * docs/06-OPTIMIZATION-IDEAS.md.
+         */
+        const val IDLE_ENCODER_REPEAT_US = 900_000L   // 0.9s → ≈1fps floor on a static screen
+
         /** Diagnostic build flag: dump the H.264 we send to the bike (bounded). Turn on to capture a
          *  .h264 of the exact wire stream for offline ffprobe analysis; off for normal use. */
         const val DUMP_H264 = false

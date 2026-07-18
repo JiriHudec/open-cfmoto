@@ -76,6 +76,7 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.fit_fill).setOnClickListener { setFit(ScreenFit.FILL) }
         findViewById<MaterialButton>(R.id.fit_fit).setOnClickListener { setFit(ScreenFit.FIT) }
         findViewById<MaterialButton>(R.id.fit_stretch).setOnClickListener { setFit(ScreenFit.STRETCH) }
+        findViewById<MaterialButton>(R.id.power_auto).setOnClickListener { setPower(PowerMode.AUTO) }
         findViewById<MaterialButton>(R.id.power_smooth).setOnClickListener { setPower(PowerMode.SMOOTH) }
         findViewById<MaterialButton>(R.id.power_balanced).setOnClickListener { setPower(PowerMode.BALANCED) }
         findViewById<MaterialButton>(R.id.power_saver).setOnClickListener { setPower(PowerMode.SAVER) }
@@ -200,6 +201,7 @@ class SetupActivity : AppCompatActivity() {
             R.id.fit_fit to ScreenFit.FIT,
             R.id.fit_stretch to ScreenFit.STRETCH)
         highlight(power,
+            R.id.power_auto to PowerMode.AUTO,
             R.id.power_smooth to PowerMode.SMOOTH,
             R.id.power_balanced to PowerMode.BALANCED,
             R.id.power_saver to PowerMode.SAVER)
