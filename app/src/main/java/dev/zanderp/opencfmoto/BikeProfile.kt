@@ -203,11 +203,20 @@ object LegacyCfdl16Profile : BikeProfile {
 /**
  * BIKE B — the CFDL26 / MotoPlay head unit on the 1000 MT-X (sdkVersion 1.1.4,
  * package com.cfmoto.cfdashmotoplay, enableSockServerAuth=true, WiFi-Direct P2P).
+ *
+ * The bike's CLIENT_INFO often claims `supportScreenTouch:true`, but the stock TFT keeps touch
+ * **locked by default** and MotoPlay/CarPlay are meant to be driven with the handlebar
+ * previous/next/confirm buttons (see the 1000 MT-X owner's manual). Advertising a touchscreen to
+ * Android Auto puts it in touch UI with **no focus cursor**, so those buttons do nothing — the
+ * classic "no touch but touch enabled" trap. We therefore treat this profile as non-touch for AA
+ * ([supportsScreenTouch]=false → focus/knob UI) and do **not** claim touch in our CLIENT_INFO
+ * reply. Dash touch events are still forwarded if the rider unlocks the panel; the in-app Dash
+ * view / on-screen pad also work. The landscape 800MT profile stays touch=true.
  */
 object Cfdl26PortraitProfile : BikeProfile {
     override val name = "CFDL26 / MotoPlay Portrait (1000 MT-X)"
     override val requiresSockServerAuth = true
-    override val supportsScreenTouch = true
+    override val supportsScreenTouch = false
     override val advertisedSupportFunction = 128
 
     /** The 1000 MT-X's 8" panel is a tall PORTRAIT screen (requests ~800x951). Ask AA for portrait
@@ -228,10 +237,9 @@ object Cfdl26PortraitProfile : BikeProfile {
         return s
     }
 
+    /** Plain reply — no supportScreenTouch claim (see class KDoc). */
     override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
-        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction).apply {
-            put("supportScreenTouch", true)
-        }
+        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction)
 
     override fun handleUnknownControl(
         tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,

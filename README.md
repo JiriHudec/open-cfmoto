@@ -99,7 +99,8 @@ RIDE app) before MotoPlay appears.
 **✅ Confirmed working with OpenCfMoto**
 
 - **800MT** (MT‑X / Explore) — landscape touchscreen (CFDL26)
-- **1000 MT‑X** — portrait touchscreen (CFDL26)
+- **1000 MT‑X** — portrait CFDL26; **handlebar-primary** (TFT touch is locked by default on the bike —
+  unlock it in the dash UI if you want finger control; Android Auto runs in focus/knob mode so ▲/▼/Enter work)
 - **450SR** — non‑touch dash (CFDL16); driven with the handlebar buttons + on-screen pad
 
 **🧪 MotoPlay-equipped — should work (untested; reports welcome)**
@@ -289,9 +290,11 @@ backpack while riding.
 
 ### 🎛️ Handlebar & on-screen controls
 
-Touchscreen dashes (800MT, 1000 MT‑X) are driven by touch. **Non-touch dashes** (the CFDL16-class
-bikes — 450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) are driven by the **handlebar buttons**
-and an **on-screen pad** instead. Open **Controls & handlebar buttons** from the main screen.
+**Touchscreen dashes** (800MT) are driven by touch. The **1000 MT‑X** and **non-touch** CFDL16-class
+bikes (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) are driven by the **handlebar buttons**
+and an **on-screen pad** — Android Auto stays in focus/knob mode so those controls can move a cursor.
+(On the 1000 MT‑X you can still unlock the bike's own touch lock for native menus; mirrored AA is
+handlebar-first so buttons keep working.) Open **Controls & handlebar buttons** from the main screen.
 
 <p>
 <img src="docs/screenshots/10_controls.png" width="220" alt="Controls — on-screen pad + handlebar toggle"/>&nbsp;
