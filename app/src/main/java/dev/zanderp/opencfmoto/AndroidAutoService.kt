@@ -13,6 +13,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -35,6 +36,13 @@ class AndroidAutoService : Service() {
     private var receiver: AaReceiver? = null
     private var mediaButtons: MediaButtonBridge? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    // Wi-Fi locks that keep the bike link fast for the whole streaming session (see [acquireWifiLocks]).
+    // Two are held on purpose: LOW_LATENCY only engages while the app is foreground AND the screen is
+    // on, but riders are told to ride with the screen OFF — so HIGH_PERF (which holds regardless of
+    // screen state) is the workhorse that keeps Wi-Fi out of power-save while pocketed, and LOW_LATENCY
+    // adds extra latency reduction when the Dash view is open / riding screen-on.
+    private var wifiLockLowLatency: WifiManager.WifiLock? = null
+    private var wifiLockHighPerf: WifiManager.WifiLock? = null
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var lastRecoveryAt = 0L
 
@@ -164,6 +172,7 @@ class AndroidAutoService : Service() {
         try { pipeline?.stop() } catch (_: Exception) {}
         pipeline = null
         try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {}
+        releaseWifiLocks()   // parked: let the radio idle again while we wait for the bike
     }
 
     private fun parkAa() {
@@ -193,7 +202,7 @@ class AndroidAutoService : Service() {
         // Reset the trailing detail (the park set it to "will resume…") back to the bike name so it
         // doesn't linger onto STREAMING as "Connected … — will resume when the bike is back".
         ConnectionState.set(Phase.STARTING_AA, BikeMemory.lastBikeName(applicationContext) ?: "")
-        reacquireWakeLock()
+        reacquireLocks()
         updateNotification("OpenCfMoto — Android Auto", "Reconnecting to the bike dash…")
 
         startReceiver()
@@ -232,7 +241,8 @@ class AndroidAutoService : Service() {
         postResumeFallbackNotification()
     }
 
-    private fun reacquireWakeLock() {
+    /** (Re)acquire every lock the streaming session needs to stay alive backgrounded / screen-off. */
+    private fun reacquireLocks() {
         try {
             if (wakeLock == null) {
                 val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -241,6 +251,41 @@ class AndroidAutoService : Service() {
             }
             if (wakeLock?.isHeld != true) wakeLock?.acquire(4 * 60 * 60 * 1000L)
         } catch (_: Exception) {}
+        acquireWifiLocks()
+    }
+
+    /**
+     * Hold Wi-Fi locks so the bike link doesn't drop into power-save mid-ride. A streaming session is
+     * real-time video over the bike AP with the phone screen off — exactly when Android would otherwise
+     * park the radio between beacons and add latency/jitter. HIGH_PERF keeps Wi-Fi awake regardless of
+     * screen state (the screen-off case); LOW_LATENCY additionally cuts latency while foreground +
+     * screen-on. Both are safe no-ops when Wi-Fi isn't the active transport. Released on park/stop so a
+     * parked bike lets the radio idle again.
+     */
+    private fun acquireWifiLocks() {
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            if (wifiLockLowLatency == null) {
+                wifiLockLowLatency = wm.createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "OpenCfMoto:LowLatency",
+                ).apply { setReferenceCounted(false) }
+            }
+            if (wifiLockHighPerf == null) {
+                @Suppress("DEPRECATION") // deprecated but still the reliable screen-off, no-power-save mode
+                val mode = WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                wifiLockHighPerf = wm.createWifiLock(mode, "OpenCfMoto:HighPerf")
+                    .apply { setReferenceCounted(false) }
+            }
+            var acquired = false
+            if (wifiLockLowLatency?.isHeld != true) { wifiLockLowLatency?.acquire(); acquired = true }
+            if (wifiLockHighPerf?.isHeld != true) { wifiLockHighPerf?.acquire(); acquired = true }
+            if (acquired) LogBus.log("[AA] Wi-Fi locks held (high-perf + low-latency) — keeping the bike link hot")
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseWifiLocks() {
+        try { if (wifiLockLowLatency?.isHeld == true) wifiLockLowLatency?.release() } catch (_: Exception) {}
+        try { if (wifiLockHighPerf?.isHeld == true) wifiLockHighPerf?.release() } catch (_: Exception) {}
     }
 
     private fun ensureChannel() {
@@ -305,8 +350,8 @@ class AndroidAutoService : Service() {
             startForeground(NOTIF_ID, notification)
         }
 
-        reacquireWakeLock()
-        LogBus.log("[AA] foreground service up (wake lock held)")
+        reacquireLocks()
+        LogBus.log("[AA] foreground service up (wake + Wi-Fi locks held)")
     }
 
     private fun startReceiver() {
@@ -396,6 +441,9 @@ class AndroidAutoService : Service() {
         pipeline = null
         try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {}
         wakeLock = null
+        releaseWifiLocks()
+        wifiLockLowLatency = null
+        wifiLockHighPerf = null
         LogBus.log("[AA] foreground service stopped")
         super.onDestroy()
     }
@@ -432,11 +480,11 @@ class AndroidAutoService : Service() {
 
         /**
          * The foreground ([MainActivity]) is taking over the resume (it will rebuild AA itself), so drop
-         * the parked flag and reacquire the wake lock — otherwise the supervisor/Wi-Fi hooks would fight
+         * the parked flag and reacquire the locks — otherwise the supervisor/Wi-Fi hooks would fight
          * the foreground path.
          */
         fun notifyForegroundResuming() {
-            active?.let { it.aaParked = false; it.wifiDownSince = 0L; it.reacquireWakeLock() }
+            active?.let { it.aaParked = false; it.wifiDownSince = 0L; it.reacquireLocks() }
         }
 
         const val ACTION_STOP = "dev.zanderp.opencfmoto.ACTION_STOP_AA"
