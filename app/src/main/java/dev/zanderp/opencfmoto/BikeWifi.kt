@@ -205,4 +205,76 @@ object BikeWifi {
         currentNetwork = null
         log("Wi-Fi released")
     }
+
+    /**
+     * Re-assert process→bike-network binding. VPNs (PCAPdroid, commercial clients, Always-on VPN)
+     * often steal the default route after we join; without this, outbound probes can leave via the
+     * tunnel even though [currentNetwork] is still the bike AP.
+     */
+    fun rebindProcessToBike(context: Context): Boolean {
+        val n = currentNetwork ?: return false
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return try {
+            cm.bindProcessToNetwork(n)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * True if any network has [NetworkCapabilities.TRANSPORT_VPN]. Bike projection needs a direct
+     * L3 path on the bike Wi-Fi; VPN kill-switches ("Block connections without VPN") drop that path.
+     */
+    fun isVpnActive(context: Context): Boolean {
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return try {
+            cm.allNetworks.any { n ->
+                cm.getNetworkCapabilities(n)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Always-on VPN with "Block connections without VPN" returns EPERM from
+     * [Network.bindSocket] / [Network.getSocketFactory] — the app cannot pin traffic to bike Wi-Fi.
+     */
+    fun isVpnBindBlocked(error: Throwable?): Boolean {
+        var t: Throwable? = error
+        while (t != null) {
+            val m = t.message ?: ""
+            if (m.contains("EPERM", ignoreCase = true) ||
+                m.contains("Operation not permitted", ignoreCase = true)
+            ) {
+                return true
+            }
+            t = t.cause
+        }
+        return false
+    }
+
+    /**
+     * Quick check: can we create a socket on the bike [Network]? Returns null if OK, else the error.
+     * Call after join when a VPN may be in lockdown mode.
+     */
+    fun testBikeSocketBind(context: Context): Exception? {
+        val n = currentNetwork ?: return null
+        rebindProcessToBike(context)
+        return try {
+            n.socketFactory.createSocket().close()
+            null
+        } catch (e1: Exception) {
+            if (isVpnBindBlocked(e1)) return e1
+            try {
+                val s = java.net.Socket()
+                n.bindSocket(s)
+                s.close()
+                null
+            } catch (e2: Exception) {
+                e2
+            }
+        }
+    }
 }

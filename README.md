@@ -101,6 +101,7 @@ RIDE app) before MotoPlay appears.
 - **800MT** (MT‑X / Explore) — landscape touchscreen (CFDL26)
 - **1000 MT‑X** — portrait CFDL26; **handlebar-primary** (TFT touch is locked by default on the bike —
   unlock it in the dash UI if you want finger control; Android Auto runs in focus/knob mode so ▲/▼/Enter work)
+- **800NK** (CRCP / sdk 0.9.23.x) — non‑touch; dual PXC heartbeat on CAR_CTRL + CAR_DATA keeps the link stable
 - **450SR** — non‑touch dash (CFDL16); driven with the handlebar buttons + on-screen pad
 
 **🧪 MotoPlay-equipped — should work (untested; reports welcome)**
@@ -394,6 +395,7 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | --- | --- |
 | App **won't connect** / keeps retrying, or the dash shows **"device is not on the network"** | This is usually the **dash's Wi‑Fi hotspot** stuck in a bad state. On the dash's phone-connection screen, **toggle between the Android and iOS (CarPlay) QR codes** — this restarts the HUD's Wi‑Fi network — then tap **Connect** again. |
 | Dash stays **blank** and the app says to **close the official CFMoto app** | The official CFMoto / EasyConnect app grabs the same link ports, so the bike connects to *it* instead. The app pops a prompt with **Close & retry** (best-effort) and **App settings** (tap *Force stop*); do that and reconnect. |
+| App reports **VPN** blocking bike Wi‑Fi | Always-on VPN with “Block connections without VPN” returns EPERM when pinning sockets to the bike AP. Turn the VPN off for the ride, disable that kill-switch, or allow LAN / local network in the VPN app — then Connect again. |
 | Dash stays **black** after connecting | Tap **Stop**, then **Connect** / **Scan bike** again. Make sure the dash is on its phone-connection screen. |
 | **No Wi‑Fi dialog** appears | Confirm the Location permission is granted; move the phone next to the bike; tap **Stop** and retry. Some phones show the dialog behind Android Auto — swipe back to OpenCfMoto. |
 | **Android Auto never starts** | Re-check [step 3](#3-one-time-android-auto-setup) (developer mode + unknown sources). |

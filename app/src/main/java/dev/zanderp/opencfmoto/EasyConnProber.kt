@@ -45,12 +45,21 @@ class EasyConnProber(
         private val LISTEN_PORTS = intArrayOf(PORT_PXC_CTRL, PORT_MEDIA_CTRL, PORT_MEDIA_DATA)
         /** How many times to auto re-probe after a link drop before giving up (user taps Connect). */
         private const val MAX_RECONNECT_ATTEMPTS = 10
+        /** Proactive PXC heartbeat interval on each :10922 channel socket (CAR_CTRL + CAR_DATA). */
+        private const val PXC_HEARTBEAT_INTERVAL_MS = 2000L
     }
 
-    private val handshake = PxcHandshake(log)
+    private val handshake = PxcHandshake(log).also {
+        // Heartbeat BOTH :10922 channel sockets — CAR_DATA carries 0x104a0/CHECK_SN and was
+        // previously left idle, which is what triggered the ~7s 800NK flap.
+        it.onPxcChannelSelected = { sock, label -> startCtrlHeartbeat(sock, label) }
+    }
     private val servers = ArrayList<ServerSocket>()
     private var multicastLock: WifiManager.MulticastLock? = null
     private var heartbeatThread: Thread? = null
+    /** One heartbeat thread per live :10922 channel socket (CAR_CTRL + CAR_DATA). */
+    private val ctrlHeartbeatThreads =
+        java.util.Collections.synchronizedList(ArrayList<Thread>())
     @Volatile private var running = false
     @Volatile private var probed = false
     @Volatile private var video: VideoPipeline? = null
@@ -97,6 +106,22 @@ class EasyConnProber(
 
         running = true
         acquireMulticastLock()
+
+        // VPNs (PCAPdroid, AdGuard, work VPN, …) steal the default route after Wi-Fi join.
+        // Re-pin the process and warn early; probe sockets also use Network.socketFactory.
+        BikeWifi.rebindProcessToBike(context)
+        if (BikeWifi.isVpnActive(context)) {
+            log("!! VPN is active — bike link needs a direct path on the bike Wi-Fi. " +
+                "If probes time out: turn VPN off, or disable 'Block connections without VPN' / enable LAN bypass.")
+            val bindErr = BikeWifi.testBikeSocketBind(context)
+            if (BikeWifi.isVpnBindBlocked(bindErr)) {
+                log("!! VPN kill-switch is blocking bike Wi-Fi (EPERM on Network.bindSocket). " +
+                    "Disable Always-on VPN → 'Block connections without VPN', allow LAN, or turn the VPN off.")
+                ConnectionState.set(Phase.ERROR, "VPN kill-switch blocking bike Wi‑Fi")
+                stop()
+                return
+            }
+        }
 
         // 1. Listen on all three ports BEFORE probing, so we're ready for the bike's call-back.
         //    SO_REUSEADDR (set before bind) lets us re-listen immediately after a Stop→Connect: the
@@ -147,6 +172,10 @@ class EasyConnProber(
         if (ownsVideo) video?.stop()
         video = null; ownsVideo = false
         heartbeatThread?.interrupt(); heartbeatThread = null
+        synchronized(ctrlHeartbeatThreads) {
+            for (t in ctrlHeartbeatThreads) t.interrupt()
+            ctrlHeartbeatThreads.clear()
+        }
         synchronized(activeClients) {
             for (s in activeClients.toList()) try { s.close() } catch (_: Exception) {}
             activeClients.clear()
@@ -200,10 +229,14 @@ class EasyConnProber(
         while (running && attempt < 5 && !probed) {
             attempt++
             try {
+                // VPN clients often re-steal the process default after join — pin again each attempt.
+                BikeWifi.rebindProcessToBike(context)
                 log("[PROBE] connect #$attempt -> ${bikeIp.hostAddress}:$BIKE_PROBE_PORT")
-                val sock = Socket()
-                try { sock.bind(InetSocketAddress(myIp, 0)) } catch (_: Exception) {}
-                network?.let { try { it.bindSocket(sock) } catch (_: Exception) {} }
+                // CRITICAL: do NOT Socket.bind(local) before Network.bindSocket — Android requires
+                // the socket unbound, and a prior bind makes bindSocket fail silently. With a VPN
+                // up that meant probes left via the tunnel and timed out to bike:10930. Prefer the
+                // network's SocketFactory (sockets are born on that Network and bypass VPN).
+                val sock = openOnBikeNetwork(network, myIp)
                 sock.connect(InetSocketAddress(bikeIp, BIKE_PROBE_PORT), 3000)
                 sock.soTimeout = 5000
 
@@ -227,11 +260,71 @@ class EasyConnProber(
                 }
                 try { sock.close() } catch (_: IOException) {}
                 if (probed) return
+            } catch (e: VpnBypassBlockedException) {
+                log("!! ${e.message}")
+                ConnectionState.set(Phase.ERROR, "VPN kill-switch blocking bike Wi‑Fi")
+                return
             } catch (e: Exception) {
                 log("[PROBE] failed: ${e.javaClass.simpleName}: ${e.message}")
             }
             try { Thread.sleep(2000) } catch (_: InterruptedException) { return }
         }
+        if (!probed && running && BikeWifi.isVpnActive(context)) {
+            log("!! probe never reached the bike while a VPN is active. Turn the VPN off " +
+                "(or allow LAN / disable 'Block connections without VPN') and tap Connect again.")
+            ConnectionState.set(Phase.ERROR, "VPN blocking bike Wi‑Fi — turn VPN off")
+        }
+    }
+
+    /** Thrown when Always-on VPN lockdown refuses [Network.bindSocket] (EPERM). */
+    private class VpnBypassBlockedException(message: String) : IOException(message)
+
+    /**
+     * Socket pinned to the bike [Network] so traffic bypasses any VPN tunnel.
+     * Falls back to process-bound / local bike IPv4 if no Network handle is available.
+     * Throws [VpnBypassBlockedException] on EPERM (VPN kill-switch) — do not retry.
+     */
+    private fun openOnBikeNetwork(network: Network?, myIp: Inet4Address): Socket {
+        if (network != null) {
+            try {
+                val s = network.socketFactory.createSocket()
+                log("[PROBE] socket via Network.socketFactory (VPN bypass)")
+                return s
+            } catch (e: Exception) {
+                if (BikeWifi.isVpnBindBlocked(e)) {
+                    throw VpnBypassBlockedException(
+                        "VPN kill-switch blocked Network.socketFactory (EPERM). " +
+                            "Disable Always-on VPN → 'Block connections without VPN', allow LAN, or turn VPN off."
+                    )
+                }
+                log("[PROBE] socketFactory failed (${e.javaClass.simpleName}: ${e.message}) — trying bindSocket")
+            }
+            try {
+                val s = Socket()
+                network.bindSocket(s)
+                log("[PROBE] socket via Network.bindSocket (VPN bypass)")
+                return s
+            } catch (e: Exception) {
+                if (BikeWifi.isVpnBindBlocked(e)) {
+                    throw VpnBypassBlockedException(
+                        "VPN kill-switch blocked Network.bindSocket (EPERM). " +
+                            "Disable Always-on VPN → 'Block connections without VPN', allow LAN, or turn VPN off."
+                    )
+                }
+                log("[PROBE] bindSocket FAILED (${e.javaClass.simpleName}: ${e.message}) — " +
+                    "falling back to process-bound socket")
+            }
+            // Process may already be bound to the bike network — unbound Socket uses that default.
+            try {
+                log("[PROBE] socket via process bind (no Network.bindSocket)")
+                return Socket()
+            } catch (e: Exception) {
+                log("[PROBE] process-bound Socket() failed (${e.javaClass.simpleName}: ${e.message})")
+            }
+        }
+        val s = Socket()
+        try { s.bind(InetSocketAddress(myIp, 0)) } catch (_: Exception) {}
+        return s
     }
 
     private fun JSONProbe(): String =
@@ -572,6 +665,43 @@ class EasyConnProber(
         multicastLock = wm.createMulticastLock("opencfmoto").apply {
             setReferenceCounted(false); acquire()
         }
+    }
+
+    /**
+     * Keep a PXC :10922 channel socket alive by sending empty CMD_HEARTBEAT (0x70000000) every
+     * [PXC_HEARTBEAT_INTERVAL_MS].
+     *
+     * The 800NK (CRCP / sdk 0.9.23.x) sends no heartbeats of its own. An idle channel socket —
+     * including CAR_DATA where CHECK_SN / 0x104a0 land — makes the dash tear down after ~7s.
+     * OpenMoto fixed this by heartbeating every :10922 accept; we previously only heartbeated
+     * CAR_CTRL, which left CAR_DATA silent and produced the "7s after 0x104a0" flap.
+     *
+     * One sender thread per socket. Writes go through [PxcFrame.write]'s `synchronized(out)`, so
+     * they interleave safely with the read loop's acks. Harmless on bikes that ignore or ack
+     * 0x70000001.
+     */
+    private fun startCtrlHeartbeat(sock: Socket, label: String) {
+        val t = thread(name = "ec-pxc-hb-$label", isDaemon = true) {
+            log("[hb] PXC $label heartbeat started (0x70000000 every ${PXC_HEARTBEAT_INTERVAL_MS}ms)")
+            val out = try { sock.getOutputStream() } catch (e: Exception) {
+                log("[hb] $label: no stream: ${e.message}"); return@thread
+            }
+            var beats = 0
+            while (running && !sock.isClosed) {
+                try { Thread.sleep(PXC_HEARTBEAT_INTERVAL_MS) } catch (_: InterruptedException) { break }
+                if (!running || sock.isClosed) break
+                try {
+                    PxcFrame(PxcFrame.CMD_HEARTBEAT, ByteArray(0)).write(out)
+                    beats++
+                    if (beats <= 3 || beats % 15 == 0) {
+                        log("[hb] → PXC $label heartbeat #$beats")
+                    }
+                } catch (e: Exception) {
+                    log("[hb] PXC $label heartbeat send failed: ${e.message}"); break
+                }
+            }
+        }
+        ctrlHeartbeatThreads.add(t)
     }
 
     private fun startHeartbeatLog() {

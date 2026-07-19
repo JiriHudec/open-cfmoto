@@ -72,9 +72,14 @@ data class PxcFrame(val cmd: Int, val payload: ByteArray) {
         // unit stalls (never opens the media ports) when we leave it unanswered. See Cfdl26Profile.
         const val CMD_LOG_REPORT          = 0x10780
         const val CMD_LOG_REPORT_ACK      = 0x10781
-        // More CFDL26 post-CHECK_SN notify frames (bike→phone JSON), each expecting a cmd+1 empty ack:
+        // More CFDL26 / CRCP post-CHECK_SN notify frames (bike→phone JSON), each expecting a cmd+1
+        // empty ack (handled via BikeProfile.handleUnknownControl):
         const val CMD_OTA_FTP_INFO        = 0x103a0   // {port,userName,pwd} for the FTP OTA server
         const val CMD_MEDIA_FEATURE_CFG   = 0x10020   // {music,talkie,tts,vr,autoChangeToBT} feature flags
+        // Lands on the CAR_DATA :10922 socket (with CHECK_SN). Empty 0x104a1 ack; SOCKS on the
+        // advertised ports is not required for a stable link (see Nk800 dual-heartbeat fix).
+        const val CMD_SOCK_SERVER_INFO     = 0x104a0
+        const val CMD_SOCK_SERVER_INFO_ACK = 0x104a1
 
         // PXC application-level commands (sent AFTER channel selection completes).
         const val CMD_CLIENT_INFO         = 65552      // 0x10010   C2P (both directions)
@@ -92,6 +97,8 @@ data class PxcFrame(val cmd: Int, val payload: ByteArray) {
             CMD_LOG_REPORT_ACK         -> "LOG_REPORT_ACK (CFDL26)"
             CMD_OTA_FTP_INFO           -> "OTA_FTP_INFO (CFDL26)"
             CMD_MEDIA_FEATURE_CFG      -> "MEDIA_FEATURE_CFG (CFDL26)"
+            CMD_SOCK_SERVER_INFO       -> "SOCK_SERVER_INFO"
+            CMD_SOCK_SERVER_INFO_ACK   -> "SOCK_SERVER_INFO_ACK"
             CMD_CLIENT_INFO            -> "CLIENT_INFO (PXC)"
             CMD_REMOTE_AUTH_RESULT     -> "REMOTE_AUTH_RESULT"
             CMD_AUTH_HUID              -> "AUTH_HUID"

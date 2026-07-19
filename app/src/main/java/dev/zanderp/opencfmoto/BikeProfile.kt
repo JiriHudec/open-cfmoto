@@ -88,16 +88,18 @@ object BikeProfiles {
     val legacy: BikeProfile = LegacyCfdl16Profile
 
     // Order matters: [maxByOrNull] keeps the FIRST profile on a score tie, so this list is the
-    // tie-break priority. LANDSCAPE is first on purpose — the vast majority of CFMoto dashes are
-    // landscape (800x480), and some firmwares (e.g. the "linux_no_package" / version_name "5.0"
-    // units) match no strong CLIENT_INFO signal and tie every profile at 1. Defaulting an ambiguous
-    // tie to Portrait sized the Android Auto video for a tall screen it doesn't have, which the dash
-    // rejected → a ~7s connect/drop flap. A genuine portrait unit (1000 MT-X) still wins outright
-    // because it scores far higher (CFDL26 version_name + its package), so order only decides ties.
-    private val all: List<BikeProfile> = listOf(Cfdl26LandscapeProfile, Cfdl26PortraitProfile, LegacyCfdl16Profile)
+    // tie-break priority. The US 800NK / CRCP family ([Nk800Profile]) is FIRST because it scores
+    // decisively (and returns 0 for non-CRCP units, so it never misroutes a 675/1000MT-X). LANDSCAPE
+    // is next — the vast majority of CFMoto dashes are landscape (800x480), and some firmwares match
+    // no strong CLIENT_INFO signal and tie every profile at 1. Defaulting an ambiguous tie to Portrait
+    // sized the Android Auto video for a tall screen it doesn't have, which the dash rejected → a ~7s
+    // connect/drop flap. A genuine portrait unit (1000 MT-X) still wins outright because it scores far
+    // higher (CFDL26 version_name + its package), so order only decides ties.
+    private val all: List<BikeProfile> =
+        listOf(Nk800Profile, Cfdl26LandscapeProfile, Cfdl26PortraitProfile, LegacyCfdl16Profile)
 
     /** Authoritative selection from CLIENT_INFO (during the PXC handshake). Ties resolve to the
-     *  first profile in [all] (landscape-first) — see the note there. */
+     *  first profile in [all] (Nk800 / landscape-first) — see the note there. */
     fun select(info: JSONObject, log: (String) -> Unit): BikeProfile {
         val scored = all.map { it to it.score(info) }
         log("[profile] scores=" + scored.joinToString { "${it.first.name}=${it.second}" })
@@ -195,9 +197,73 @@ object LegacyCfdl16Profile : BikeProfile {
     override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
         basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction)
 
+    /**
+     * Newer CFDL16-family units (e.g. sdk 0.9.25.1 / `CFDL06.6.10` / package `net.easyconn`,
+     * CFMOTO9805) send the same post-handshake notify burst as CFDL26 — notably
+     * [PxcFrame.CMD_OTA_FTP_INFO] (0x103a0) — and will **not** open the media ports until each is
+     * acked cmd+1. The old "log only" path left 0x103a0 hanging → media never starts. Same empty
+     * cmd+1 ack as CFDL26.
+     */
     override fun handleUnknownControl(
         tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
-    ): Boolean = false  // reproduces the original "log only, no reply" else-branch
+    ): Boolean = Cfdl26PortraitProfile.handleUnknownControl(tag, frame, out, log)
+}
+
+/**
+ * BIKE C — the US-market CFMoto 800NK family. Head unit HUID prefix "CRCP", package_name
+ * "linux_no_package", **sdkVersion 0.9.23.x** — an OLDER CFDL16-family dialect, NOT the newer
+ * CFDL26 (1.1.x) 1000 MT-X / 800 MT. Wi-Fi Direct, non-touch panel. Seen as landscape 800×400
+ * (sdk 0.9.23.4, e.g. CFMOTO-1381DA) and a newer portrait ~460×750 variant (sdk 0.9.23.9,
+ * version_name V1.0.18, e.g. CFMOTO-1E9714).
+ *
+ * Two things this family needs that the CFDL26 (1000MT-X/800MT) profiles get wrong:
+ *   1. It sends NO heartbeats of its own → an idle :10922 channel socket (CAR_CTRL **or**
+ *      CAR_DATA) tears the whole session down every ~7s. The phone must send 0x70000000 on
+ *      **both** channel sockets (OpenMoto / 0.9.23.4 confirmed; V1.0.18 / 0.9.23.9 flaps the same
+ *      way if only CAR_CTRL is heartbeated — CAR_DATA carries CHECK_SN / 0x104a0 and goes silent).
+ *   2. It is a NON-TOUCH panel and does NOT do sock-server auth. So — unlike the CFDL26 profiles —
+ *      we must NOT advertise `supportScreenTouch:true`.
+ * Its extra notify frames (0x10450 / 0x10470 voice grammar / 0x104a0 OTA-sock info) are acked cmd+1,
+ * same as the CFDL26 units.
+ */
+object Nk800Profile : BikeProfile {
+    override val name = "CFMoto 800NK (CRCP / sdk 0.9.23.x)"
+    override val requiresSockServerAuth = false
+    override val supportsScreenTouch = false
+    override val advertisedSupportFunction = 128
+
+    /** Default to landscape 800x480 (the confirmed 800NK panel). Portrait CRCP variants
+     *  (sdk 0.9.23.9) auto-correct orientation from the capture request via DashMemory on reconnect. */
+    override val aaVideo = AaVideoSpec(AaResolution.LANDSCAPE_800x480, dpi = 160)
+
+    /** Known US 800NK QR modelIds (landscape 66660703/66660721, portrait 66660732). */
+    override fun matchesModelId(modelId: String): Boolean =
+        modelId.trim() in setOf("66660703", "66660721", "66660732")
+
+    /**
+     * Claim only genuine CRCP / 0.9.23.x-linux units. Returns 0 for everything else so it can never
+     * misroute the 675 (CFDL16 0.9.29.1) or the 1000 MT-X (CFDL26 1.1.x) even though it's ordered
+     * first in [BikeProfiles.all].
+     */
+    override fun score(info: JSONObject): Int {
+        val crcp = info.optString("HUID").startsWith("CRCP")
+        val sdk0923 = info.optString("sdkVersion").startsWith("0.9.23")
+        val linuxPkg = info.optString("package_name") == "linux_no_package"
+        if (!crcp && !(sdk0923 && linuxPkg)) return 0   // not this family
+        var s = 0
+        if (crcp) s += 4
+        if (sdk0923) s += 3
+        if (linuxPkg) s += 2
+        return s
+    }
+
+    /** Plain reply — deliberately NO supportScreenTouch (this panel is non-touch). */
+    override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
+        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction)
+
+    override fun handleUnknownControl(
+        tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
+    ): Boolean = Cfdl26PortraitProfile.handleUnknownControl(tag, frame, out, log)
 }
 
 /**

@@ -50,6 +50,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingAaStart = false
     /** Guards the "close the official CFMoto app" prompt so it shows once per error, not every redraw. */
     private var rivalPromptShown = false
+    /** Guards the VPN kill-switch prompt so it shows once per error, not every redraw. */
+    private var vpnPromptShown = false
 
     private val scanLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -484,6 +486,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             rivalPromptShown = false
         }
+        // Always-on VPN kill-switch (EPERM on Network.bindSocket) — offer VPN settings once per error.
+        if (phase == Phase.ERROR && detail.contains("VPN", ignoreCase = true)) {
+            if (!vpnPromptShown) { vpnPromptShown = true; promptVpnKillSwitch() }
+        } else {
+            vpnPromptShown = false
+        }
         connectBtn.text = when {
             phase.busy -> "Connecting…"
             phase == Phase.STREAMING || phase == Phase.MIRRORING -> "Reconnect"
@@ -548,6 +556,38 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Dismiss", null)
             .setCancelable(true)
             .apply { if (!installed) setMessage("Something is holding the bike's link ports (10920-10922). Close any other CFMoto/EasyConnect app and reconnect.") }
+            .show()
+    }
+
+    /**
+     * Always-on VPN with connection blocking prevents pinning sockets to bike Wi-Fi (EPERM).
+     * Offer a shortcut into system VPN settings; the user must disable the kill-switch or VPN.
+     */
+    private fun promptVpnKillSwitch() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("VPN is blocking the bike")
+            .setMessage(
+                "Android Auto reached the phone, but a VPN kill-switch is blocking the bike Wi‑Fi " +
+                    "(Network.bindSocket → EPERM).\n\n" +
+                    "Fix (any one):\n" +
+                    "• Turn the VPN off for this ride\n" +
+                    "• Disable Always-on VPN → \"Block connections without VPN\"\n" +
+                    "• Allow LAN / local network in the VPN app (PCAPdroid, AdGuard, etc.)\n\n" +
+                    "Then tap Connect again."
+            )
+            .setPositiveButton("VPN settings") { _, _ ->
+                try {
+                    startActivity(Intent("android.net.vpn.SETTINGS"))
+                } catch (_: Exception) {
+                    try {
+                        startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "Open Settings ▸ Network ▸ VPN", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Dismiss", null)
+            .setCancelable(true)
             .show()
     }
 

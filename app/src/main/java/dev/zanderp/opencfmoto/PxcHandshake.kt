@@ -31,6 +31,13 @@ class PxcHandshake(
     @Volatile var profile: BikeProfile = BikeProfiles.legacy
         private set
 
+    /**
+     * Called when the bike selects a PXC channel on a :10922 socket (CAR_CTRL or CAR_DATA).
+     * [EasyConnProber] starts a proactive 0x70000000 heartbeat on **each** of those sockets —
+     * the 800NK (sdk 0.9.23.x) tears the whole session down after ~7s of silence on either one.
+     */
+    @Volatile var onPxcChannelSelected: ((Socket, String) -> Unit)? = null
+
     /** Dispatch one inbound frame on a given socket (ctrl or media). */
     fun handle(tag: String, frame: PxcFrame, socket: Socket) {
         val out = socket.getOutputStream()
@@ -38,10 +45,12 @@ class PxcHandshake(
             PxcFrame.CMD_CHANNEL_CAR_CTRL -> {
                 log("[$tag] bike selected CAR_CTRL (0x10000) → ack 0x10001")
                 PxcFrame(PxcFrame.CMD_CHANNEL_CAR_CTRL + 1, ByteArray(0)).write(out)
+                onPxcChannelSelected?.invoke(socket, "CAR_CTRL")
             }
             PxcFrame.CMD_CHANNEL_CAR_DATA -> {
                 log("[$tag] bike selected CAR_DATA (0x20000) → ack 0x20001")
                 PxcFrame(PxcFrame.CMD_CHANNEL_CAR_DATA + 1, ByteArray(0)).write(out)
+                onPxcChannelSelected?.invoke(socket, "CAR_DATA")
             }
             PxcFrame.CMD_CLIENT_INFO -> onClientInfo(tag, frame, out)
             PxcFrame.CMD_QUERY_SPEED -> {
