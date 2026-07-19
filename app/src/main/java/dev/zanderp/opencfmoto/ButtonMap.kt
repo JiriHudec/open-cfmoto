@@ -68,7 +68,7 @@ enum class ButtonGesture(
     NAV_BACK("navBack", "Backward  ◀ / ▲", "◀ left, or the ▲ volume press on non-touch dashes", ButtonAction.KNOB_BACK),
     NAV_FWD("navFwd", "Forward  ▶ / ▼", "▶ right, or the ▼ volume press on non-touch dashes", ButtonAction.KNOB_FORWARD),
     SELECT_PRESS("selectPress", "Select  Enter / ★", "a quick tap of the OK / ★ start button", ButtonAction.SELECT),
-    SELECT_LONG("selectLong", "Select (hold)  Enter / ★", "press and hold the OK / ★ button", ButtonAction.ASSISTANT),
+    SELECT_LONG("selectLong", "Select (hold)  Enter / ★", "press and hold the OK / ★ button", ButtonAction.HOME),
     NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward within a short window", ButtonAction.DPAD_LEFT),
     NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward within a short window", ButtonAction.DPAD_RIGHT),
     SELECT_DOUBLE("selectDouble", "Select ×2", "double-tap the OK / ★ button", ButtonAction.BACK),
@@ -82,7 +82,7 @@ object ButtonMap {
     private const val PREF = "button_map"
     private const val KEY_DEFAULTS_VER = "defaults_ver"
     /** Bumped when shipping new [ButtonGesture.default] values — migrates riders still on old defaults. */
-    private const val DEFAULTS_VER = 2
+    private const val DEFAULTS_VER = 3
 
     fun get(context: Context, gesture: ButtonGesture): ButtonAction {
         ensureDefaultsMigrated(context)
@@ -114,6 +114,7 @@ object ButtonMap {
     fun ensureDefaultsMigrated(context: Context) {
         val p = prefs(context)
         if (p.getInt(KEY_DEFAULTS_VER, 1) >= DEFAULTS_VER) return
+        // v2 migrations (idempotent if already applied)
         clearIfStored(context, ButtonGesture.NAV_BACK_DOUBLE, ButtonAction.HOME)
         clearIfStored(context, ButtonGesture.NAV_FWD_DOUBLE, ButtonAction.BACK)
         clearIfStored(context, ButtonGesture.SELECT_DOUBLE, ButtonAction.ASSISTANT)
@@ -123,6 +124,8 @@ object ButtonMap {
             BikeScope.remove(p, context, ButtonGesture.NAV_BACK.id)
             BikeScope.remove(p, context, ButtonGesture.NAV_FWD.id)
         }
+        // v3: Select hold → Home (was Assistant)
+        clearIfStored(context, ButtonGesture.SELECT_LONG, ButtonAction.ASSISTANT)
         p.edit().putInt(KEY_DEFAULTS_VER, DEFAULTS_VER).apply()
     }
 

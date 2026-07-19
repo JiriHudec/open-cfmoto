@@ -202,7 +202,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             session?.setMetadata(
                 MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, "Android Auto control")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ knob · ×2 D-pad · Enter OK · ×2 Back · hold voice")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ knob · ×2 D-pad · Enter OK · ×2 Back · hold Home")
                     .putString(MediaMetadata.METADATA_KEY_ALBUM, "OpenCfMoto")
                     .putLong(MediaMetadata.METADATA_KEY_DURATION, TRACK_MS)
                     .build()

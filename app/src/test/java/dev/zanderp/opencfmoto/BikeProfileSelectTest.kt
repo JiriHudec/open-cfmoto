@@ -44,6 +44,6 @@ class BikeProfileSelectTest {
         assertEquals(ButtonAction.DPAD_LEFT, ButtonGesture.NAV_BACK_DOUBLE.default)
         assertEquals(ButtonAction.DPAD_RIGHT, ButtonGesture.NAV_FWD_DOUBLE.default)
         assertEquals(ButtonAction.BACK, ButtonGesture.SELECT_DOUBLE.default)
-        assertEquals(ButtonAction.ASSISTANT, ButtonGesture.SELECT_LONG.default)
+        assertEquals(ButtonAction.HOME, ButtonGesture.SELECT_LONG.default)
     }
 }
