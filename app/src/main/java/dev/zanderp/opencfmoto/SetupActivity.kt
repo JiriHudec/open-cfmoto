@@ -37,6 +37,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var themeDesc: TextView
     private lateinit var dblTapDesc: TextView
     private lateinit var holdDesc: TextView
+    private lateinit var nonTouchDesc: TextView
     private lateinit var btStatus: TextView
     private lateinit var resumeBtn: MaterialButton
 
@@ -62,6 +63,7 @@ class SetupActivity : AppCompatActivity() {
         themeDesc = findViewById(R.id.theme_desc)
         dblTapDesc = findViewById(R.id.dbltap_desc)
         holdDesc = findViewById(R.id.hold_desc)
+        nonTouchDesc = findViewById(R.id.nontouch_desc)
         btStatus = findViewById(R.id.bt_status)
         resumeBtn = findViewById(R.id.resume_perm_btn)
 
@@ -100,6 +102,8 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.recovery_off).setOnClickListener { setAutoRecovery(false) }
         findViewById<MaterialButton>(R.id.logtrips_on).setOnClickListener { setLogTrips(true) }
         findViewById<MaterialButton>(R.id.logtrips_off).setOnClickListener { setLogTrips(false) }
+        findViewById<MaterialButton>(R.id.nontouch_on).setOnClickListener { setForceNonTouch(true) }
+        findViewById<MaterialButton>(R.id.nontouch_off).setOnClickListener { setForceNonTouch(false) }
         findViewById<MaterialButton>(R.id.bt_settings_btn).setOnClickListener { BluetoothHelper.openBluetoothSettings(this) }
         resumeBtn.setOnClickListener { requestOverlayPermission() }
 
@@ -172,6 +176,12 @@ class SetupActivity : AppCompatActivity() {
         Toast.makeText(this, "Trip logging ${if (on) "on" else "off"}", Toast.LENGTH_SHORT).show()
     }
 
+    private fun setForceNonTouch(on: Boolean) {
+        AppSettings.setForceNonTouch(this, on)
+        refreshOptions()
+        toast("Disable touchscreen: ${if (on) "on" else "off"}")
+    }
+
     private fun toast(msg: String) =
         Toast.makeText(this, "$msg (applies next connect)", Toast.LENGTH_SHORT).show()
 
@@ -191,6 +201,10 @@ class SetupActivity : AppCompatActivity() {
         themeDesc.text = theme.label
         dblTapDesc.text = dbl.label
         holdDesc.text = hold.label
+        nonTouchDesc.text = if (AppSettings.forceNonTouch(this))
+            "On — focus/knob UI so handlebar buttons work"
+        else
+            "Off — use the bike profile (touch dashes stay touch)"
 
         highlight(quality,
             R.id.quality_smooth to VideoQuality.SMOOTH,
@@ -233,6 +247,9 @@ class SetupActivity : AppCompatActivity() {
         highlight(AppSettings.logTrips(this),
             R.id.logtrips_on to true,
             R.id.logtrips_off to false)
+        highlight(AppSettings.forceNonTouch(this),
+            R.id.nontouch_on to true,
+            R.id.nontouch_off to false)
     }
 
     /** Refresh the Bluetooth pairing status line shown in the helper card. */

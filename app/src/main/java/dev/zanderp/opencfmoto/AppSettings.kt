@@ -12,12 +12,15 @@ import android.content.Context
  *    automatically instead of waiting for a tap. Default on; the rider can turn it off.
  *  - [autoRecovery] — the watchdog ([AndroidAutoService]) restarts the bike link if projection
  *    stalls or the dash drops, without a manual Stop/Start. Default on.
+ *  - [forceNonTouch] — never advertise a touchscreen to Android Auto (focus/knob UI). Use when
+ *    handlebar buttons do nothing because a touch profile was selected for a non-touch dash.
  */
 object AppSettings {
     private const val PREFS = "opencfmoto_bike"
     private const val KEY_AUTO_CONNECT = "auto_connect"
     private const val KEY_AUTO_RECOVERY = "auto_recovery"
     private const val KEY_LOG_TRIPS = "log_trips"
+    private const val KEY_FORCE_NON_TOUCH = "force_non_touch"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -33,4 +36,15 @@ object AppSettings {
     fun logTrips(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_LOG_TRIPS, true)
     fun setLogTrips(ctx: Context, on: Boolean) =
         prefs(ctx).edit().putBoolean(KEY_LOG_TRIPS, on).apply()
+
+    fun forceNonTouch(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_FORCE_NON_TOUCH, false)
+    fun setForceNonTouch(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_FORCE_NON_TOUCH, on).apply()
+        BikeProfileHolder.forceNonTouch = on
+    }
+
+    /** Sync [BikeProfileHolder.forceNonTouch] from prefs (call on process start). */
+    fun applyToHolder(ctx: Context) {
+        BikeProfileHolder.forceNonTouch = forceNonTouch(ctx)
+    }
 }

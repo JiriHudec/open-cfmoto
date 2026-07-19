@@ -81,7 +81,7 @@ class ServiceDiscoveryResponse
                     // Advertise a touchscreen only on dashes that actually have one. On a non-touch
                     // dash advertising touch would put AA in touch mode with no on-screen focus for
                     // the D-pad/knob to move.
-                    if (BikeProfileHolder.active.supportsScreenTouch) {
+                    if (BikeProfileHolder.advertisesScreenTouch) {
                         inp.touchscreen = Control.Service.InputSourceService.TouchConfig.newBuilder().apply {
                             setWidth(spec.width)
                             setHeight(spec.height)

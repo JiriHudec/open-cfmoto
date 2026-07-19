@@ -66,10 +66,11 @@ class ControlsActivity : AppCompatActivity() {
         // cursor for a rotary knob to move — so handlebar-button navigation can't work there and only
         // costs the rider their music. Warn, and let them just tap the dash. The live profile is
         // authoritative once connected; otherwise fall back to what the last connect remembered.
+        AppSettings.applyToHolder(this)
         val live = BikeProfileHolder.active
         val touchDash: Boolean? = if (live !== BikeProfiles.legacy) {
-            DashMemory.setLastDashTouch(this, live.supportsScreenTouch)
-            live.supportsScreenTouch
+            DashMemory.setLastDashTouch(this, BikeProfileHolder.advertisesScreenTouch)
+            BikeProfileHolder.advertisesScreenTouch
         } else {
             DashMemory.lastDashTouch(this)
         }

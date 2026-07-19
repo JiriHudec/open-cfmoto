@@ -146,8 +146,17 @@ object BikeProfileHolder {
      */
     @Volatile var aaVideoOverride: AaVideoSpec? = null
 
+    /**
+     * Setup ▸ "Disable touchscreen" — when true, never advertise a touchscreen to Android Auto
+     * (focus/knob UI) even if the active profile claims touch. Synced from [AppSettings.forceNonTouch].
+     */
+    @Volatile var forceNonTouch: Boolean = false
+
     /** The effective Android Auto video spec: the user override if set, else the active profile's. */
     val aaVideo: AaVideoSpec get() = aaVideoOverride ?: active.aaVideo
+
+    /** Whether AA / CLIENT_INFO should advertise a touchscreen (profile ∧ ¬forceNonTouch). */
+    val advertisesScreenTouch: Boolean get() = !forceNonTouch && active.supportsScreenTouch
 }
 
 /** Shared base CLIENT_INFO reply. Keys/order match the original PxcHandshake.buildClientInfoReply so
@@ -357,7 +366,9 @@ object Cfdl26LandscapeProfile : BikeProfile {
 
     override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
         basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction).apply {
-            put("supportScreenTouch", true)
+            // Honour Setup ▸ Disable touchscreen so mis-routed non-touch dashes can still get
+            // focus/knob AA without claiming a panel they don't have.
+            if (BikeProfileHolder.advertisesScreenTouch) put("supportScreenTouch", true)
         }
 
     // Baseline@3.1 (the interface default). This USED to be false (Main/High), which is the prime

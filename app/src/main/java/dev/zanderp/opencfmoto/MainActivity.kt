@@ -90,8 +90,9 @@ class MainActivity : AppCompatActivity() {
     /** Pick the bike profile from the QR up front — it drives the Android Auto resolution/orientation,
      *  which must be set before AA starts. CLIENT_INFO refines it later during the PXC handshake. */
     private fun applyProfile(qr: QrData) {
+        AppSettings.applyToHolder(this)
         BikeProfileHolder.active = BikeProfiles.selectByQr(qr)
-        DashMemory.setLastDashTouch(this, BikeProfileHolder.active.supportsScreenTouch)
+        DashMemory.setLastDashTouch(this, BikeProfileHolder.advertisesScreenTouch)
         val userOverride = VideoPrefs.resolutionOverride(this, BikeProfileHolder.active)
         // In AUTO mode, if a previous session revealed this dash is a different orientation than the
         // profile assumes, flip AA to match. Learned from the dash's REQ_CONFIG_CAPTURE (see DashMemory).
@@ -103,8 +104,9 @@ class MainActivity : AppCompatActivity() {
             autoGeo != null -> " (auto-orientation from last connect)"
             else -> ""
         }
+        val touchNote = if (BikeProfileHolder.forceNonTouch) " [Disable touchscreen ON — focus/knob AA]" else ""
         log("→ bike profile (QR ssid=${qr.ssid} modelId=${qr.modelId}): ${BikeProfileHolder.active.name} " +
-            "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi$note")
+            "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi$note$touchNote")
     }
 
     /** Start the Android Auto → bike projection for [qr]. Shared by the one-tap Connect reconnect
@@ -177,6 +179,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppSettings.applyToHolder(this)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
