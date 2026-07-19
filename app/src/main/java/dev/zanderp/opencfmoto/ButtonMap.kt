@@ -69,9 +69,9 @@ enum class ButtonGesture(
     NAV_FWD("navFwd", "Forward  ▶ / ▼", "▶ right, or the ▼ volume press on non-touch dashes", ButtonAction.KNOB_FORWARD),
     SELECT_PRESS("selectPress", "Select  Enter / ★", "a quick tap of the OK / ★ start button", ButtonAction.SELECT),
     SELECT_LONG("selectLong", "Select (hold)  Enter / ★", "press and hold the OK / ★ button", ButtonAction.ASSISTANT),
-    NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward within a short window", ButtonAction.HOME),
-    NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward within a short window", ButtonAction.BACK),
-    SELECT_DOUBLE("selectDouble", "Select ×2", "double-tap the OK / ★ button", ButtonAction.ASSISTANT),
+    NAV_BACK_DOUBLE("navBackDouble", "Backward ×2", "double-tap backward within a short window", ButtonAction.DPAD_LEFT),
+    NAV_FWD_DOUBLE("navFwdDouble", "Forward ×2", "double-tap forward within a short window", ButtonAction.DPAD_RIGHT),
+    SELECT_DOUBLE("selectDouble", "Select ×2", "double-tap the OK / ★ button", ButtonAction.BACK),
 }
 
 /**
@@ -80,16 +80,24 @@ enum class ButtonGesture(
  */
 object ButtonMap {
     private const val PREF = "button_map"
+    private const val KEY_DEFAULTS_VER = "defaults_ver"
+    /** Bumped when shipping new [ButtonGesture.default] values — migrates riders still on old defaults. */
+    private const val DEFAULTS_VER = 2
 
-    fun get(context: Context, gesture: ButtonGesture): ButtonAction =
-        ButtonAction.byId(BikeScope.getString(prefs(context), context, gesture.id, null)) ?: gesture.default
+    fun get(context: Context, gesture: ButtonGesture): ButtonAction {
+        ensureDefaultsMigrated(context)
+        return ButtonAction.byId(BikeScope.getString(prefs(context), context, gesture.id, null))
+            ?: gesture.default
+    }
 
     fun set(context: Context, gesture: ButtonGesture, action: ButtonAction) {
+        ensureDefaultsMigrated(context)
         BikeScope.putString(prefs(context), context, gesture.id, action.id)
     }
 
     /** Reset the **selected bike's** mapping to defaults (other bikes keep theirs). */
     fun resetAll(context: Context) {
+        ensureDefaultsMigrated(context)
         val p = prefs(context)
         for (g in ButtonGesture.entries) BikeScope.remove(p, context, g.id)
     }
@@ -97,6 +105,32 @@ object ButtonMap {
     /** True when every gesture is still on its default — used to enable/disable the reset button. */
     fun isAllDefault(context: Context): Boolean =
         ButtonGesture.entries.all { get(context, it) == it.default }
+
+    /**
+     * One-shot upgrade of shipped defaults (v2: ×2 = D-pad L/R, Select ×2 = Back). Clears stored
+     * values that still match the *previous* defaults so the new ones apply; custom mappings stay.
+     * Also un-swaps the common inverted knob (◀→forward / ▶→back) left over from earlier testing.
+     */
+    fun ensureDefaultsMigrated(context: Context) {
+        val p = prefs(context)
+        if (p.getInt(KEY_DEFAULTS_VER, 1) >= DEFAULTS_VER) return
+        clearIfStored(context, ButtonGesture.NAV_BACK_DOUBLE, ButtonAction.HOME)
+        clearIfStored(context, ButtonGesture.NAV_FWD_DOUBLE, ButtonAction.BACK)
+        clearIfStored(context, ButtonGesture.SELECT_DOUBLE, ButtonAction.ASSISTANT)
+        val back = ButtonAction.byId(BikeScope.getString(p, context, ButtonGesture.NAV_BACK.id, null))
+        val fwd = ButtonAction.byId(BikeScope.getString(p, context, ButtonGesture.NAV_FWD.id, null))
+        if (back == ButtonAction.KNOB_FORWARD && fwd == ButtonAction.KNOB_BACK) {
+            BikeScope.remove(p, context, ButtonGesture.NAV_BACK.id)
+            BikeScope.remove(p, context, ButtonGesture.NAV_FWD.id)
+        }
+        p.edit().putInt(KEY_DEFAULTS_VER, DEFAULTS_VER).apply()
+    }
+
+    private fun clearIfStored(context: Context, gesture: ButtonGesture, oldDefault: ButtonAction) {
+        val p = prefs(context)
+        val stored = BikeScope.getString(p, context, gesture.id, null) ?: return
+        if (stored == oldDefault.id) BikeScope.remove(p, context, gesture.id)
+    }
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE)

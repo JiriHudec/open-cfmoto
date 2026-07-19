@@ -118,17 +118,20 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
     private fun reassert() {
         if (!ButtonMode.isControlAa(context)) return
         try {
-            log("[BTN] bike link up — re-asserting media focus so the dash re-reads our player")
-            releaseMediaFocus()
+            // Soft re-announce: flip session active + refresh metadata/pin. Avoid abandon/re-take of
+            // audio focus — that hard pause/resume cycle is what made music/nav sound "stuck" on
+            // some Samsungs while still letting the dash re-read us as the AVRCP player.
+            log("[BTN] bike link up — re-announcing media session so the dash re-reads our player")
             session?.isActive = false
             handler.postDelayed({
                 try {
-                    takeMediaFocus()
+                    publishMetadata()
                     session?.isActive = true
                     pinVolume()
-                    log("[BTN] media focus re-asserted")
+                    postMediaNotification()
+                    log("[BTN] media session re-announced")
                 } catch (e: Exception) {
-                    log("[BTN] re-assert (re-take) failed: $e")
+                    log("[BTN] re-assert failed: $e")
                 }
             }, REASSERT_GAP_MS)
         } catch (e: Exception) {
@@ -165,13 +168,15 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
      */
     private fun takeMediaFocus() {
         try {
-            val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            // MAY_DUCK keeps other media audible (ducked) instead of a hard pause that felt like
+            // "sound stuck" when the bridge grabbed exclusive GAIN on some phones.
+            val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                 .setAudioAttributes(mediaAttrs)
-                .setOnAudioFocusChangeListener { /* we play silence; nothing to duck */ }
+                .setOnAudioFocusChangeListener { /* silence track; nothing to duck here */ }
                 .build()
             focusRequest = req
             val granted = audio.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            log("[BTN] audio focus ${if (granted) "granted" else "DENIED"}")
+            log("[BTN] audio focus ${if (granted) "granted (duck)" else "DENIED"}")
         } catch (e: Exception) {
             log("[BTN] audio focus failed: $e")
         }
@@ -197,7 +202,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
             session?.setMetadata(
                 MediaMetadata.Builder()
                     .putString(MediaMetadata.METADATA_KEY_TITLE, "Android Auto control")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ / ▲ ▼ navigate · Enter selects · hold = voice")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "◀ ▶ knob · ×2 D-pad · Enter OK · ×2 Back · hold voice")
                     .putString(MediaMetadata.METADATA_KEY_ALBUM, "OpenCfMoto")
                     .putLong(MediaMetadata.METADATA_KEY_DURATION, TRACK_MS)
                     .build()

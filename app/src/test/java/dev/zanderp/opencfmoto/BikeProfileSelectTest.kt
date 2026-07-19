@@ -35,4 +35,15 @@ class BikeProfileSelectTest {
         assertTrue(Cfdl26LandscapeProfile.supportsScreenTouch)
         assertFalse(Nk800Profile.supportsScreenTouch)
     }
+
+    @Test
+    fun buttonDefaultsMatchHandlebarLayout() {
+        assertEquals(ButtonAction.KNOB_BACK, ButtonGesture.NAV_BACK.default)
+        assertEquals(ButtonAction.KNOB_FORWARD, ButtonGesture.NAV_FWD.default)
+        assertEquals(ButtonAction.SELECT, ButtonGesture.SELECT_PRESS.default)
+        assertEquals(ButtonAction.DPAD_LEFT, ButtonGesture.NAV_BACK_DOUBLE.default)
+        assertEquals(ButtonAction.DPAD_RIGHT, ButtonGesture.NAV_FWD_DOUBLE.default)
+        assertEquals(ButtonAction.BACK, ButtonGesture.SELECT_DOUBLE.default)
+        assertEquals(ButtonAction.ASSISTANT, ButtonGesture.SELECT_LONG.default)
+    }
 }

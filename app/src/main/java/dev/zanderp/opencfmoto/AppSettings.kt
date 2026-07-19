@@ -43,8 +43,10 @@ object AppSettings {
         BikeProfileHolder.forceNonTouch = on
     }
 
-    /** Sync [BikeProfileHolder.forceNonTouch] from prefs (call on process start). */
+    /** Sync holder flags from prefs (call on process start / before connect). */
     fun applyToHolder(ctx: Context) {
         BikeProfileHolder.forceNonTouch = forceNonTouch(ctx)
+        ProfilePrefs.applyToHolder(ctx)
+        ButtonMap.ensureDefaultsMigrated(ctx)
     }
 }

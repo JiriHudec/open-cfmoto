@@ -99,8 +99,13 @@ object BikeProfiles {
         listOf(Nk800Profile, Cfdl26LandscapeProfile, Cfdl26PortraitProfile, LegacyCfdl16Profile)
 
     /** Authoritative selection from CLIENT_INFO (during the PXC handshake). Ties resolve to the
-     *  first profile in [all] (Nk800 / landscape-first) — see the note there. */
+     *  first profile in [all] (Nk800 / landscape-first) — see the note there. Honour Setup's
+     *  [BikeProfileHolder.profileOverride] when set. */
     fun select(info: JSONObject, log: (String) -> Unit): BikeProfile {
+        BikeProfileHolder.profileOverride.resolve()?.let {
+            log("[profile] manual override → ${it.name}")
+            return it
+        }
         val scored = all.map { it to it.score(info) }
         log("[profile] scores=" + scored.joinToString { "${it.first.name}=${it.second}" })
         return scored.filter { it.second > 0 }.maxByOrNull { it.second }?.first ?: legacy
@@ -108,6 +113,7 @@ object BikeProfiles {
 
     /** Early selection from the QR code data, before we connect. Falls back to legacy. */
     fun selectByQr(qr: QrData?): BikeProfile {
+        BikeProfileHolder.profileOverride.resolve()?.let { return it }
         if (qr == null) return legacy
         val matches = all.filter { it.matchesModelId(qr.modelId ?: "") }
         if (matches.isEmpty()) return legacy
@@ -151,6 +157,12 @@ object BikeProfileHolder {
      * (focus/knob UI) even if the active profile claims touch. Synced from [AppSettings.forceNonTouch].
      */
     @Volatile var forceNonTouch: Boolean = false
+
+    /**
+     * Setup ▸ bike profile override. Synced from [ProfilePrefs]; [ProfileOverride.AUTO] means
+     * score from QR / CLIENT_INFO as usual.
+     */
+    @Volatile var profileOverride: ProfileOverride = ProfileOverride.AUTO
 
     /** The effective Android Auto video spec: the user override if set, else the active profile's. */
     val aaVideo: AaVideoSpec get() = aaVideoOverride ?: active.aaVideo
@@ -197,11 +209,15 @@ object LegacyCfdl16Profile : BikeProfile {
     /** Known 675 QR modelId. Legacy is also the fallback, so this is just for a positive early match. */
     override fun matchesModelId(modelId: String): Boolean = modelId.trim() == "37416"
 
-    /** Constant floor so a bike matching no strong signal still selects a usable (landscape 800x480)
-     *  profile, and so legacy is the guaranteed fallback. It no longer "wins" ties — the CFDL26
-     *  Landscape profile is ordered ahead of it (see [BikeProfiles.all]) so an ambiguous CFDL26-style
-     *  unit still gets the control-frame acks it needs while staying landscape. */
-    override fun score(info: JSONObject): Int = 1
+    /** Floor of 1 for unknown bikes, plus strong signals for genuine CFDL16 / 0.9.29 units so they
+     *  are never beaten by a bare CFDL26 `supportFunction=128` tie. */
+    override fun score(info: JSONObject): Int {
+        var s = 1
+        if (info.optString("HUName").startsWith("CFDL16")) s += 4
+        if (info.optString("sdkVersion").startsWith("0.9.29")) s += 3
+        if (info.optString("channel").trim() == "37416") s += 2
+        return s
+    }
 
     override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
         basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction)
@@ -308,7 +324,9 @@ object Cfdl26PortraitProfile : BikeProfile {
         if (sdk.isNotEmpty() && !sdk.startsWith("0.")) s += 2   // 1.1.4 etc., not the 0.9.x legacy unit
         if (info.optBoolean("enableSockServerAuth", false)) s += 2
         if (info.optString("package_name") == "com.cfmoto.cfdashmotoplay") s += 3
-        if (info.optInt("supportFunction", 0) == 128) s += 1
+        // supportFunction=128 alone is NOT a CFDL26 signal — many CFDL16 units advertise it too and
+        // used to tie Landscape/Portrait/Legacy at 1 (Landscape won → touch AA on a non-touch dash).
+        if (s > 0 && info.optInt("supportFunction", 0) == 128) s += 1
         return s
     }
 
@@ -360,7 +378,7 @@ object Cfdl26LandscapeProfile : BikeProfile {
         if (sdk.isNotEmpty() && !sdk.startsWith("0.")) s += 2
         if (info.optBoolean("enableSockServerAuth", false)) s += 2
         if (info.optString("package_name") == "com.cfmoto.easyconnect") s += 3
-        if (info.optInt("supportFunction", 0) == 128) s += 1
+        if (s > 0 && info.optInt("supportFunction", 0) == 128) s += 1
         return s
     }
 

@@ -38,6 +38,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var dblTapDesc: TextView
     private lateinit var holdDesc: TextView
     private lateinit var nonTouchDesc: TextView
+    private lateinit var profileDesc: TextView
     private lateinit var btStatus: TextView
     private lateinit var resumeBtn: MaterialButton
 
@@ -64,6 +65,7 @@ class SetupActivity : AppCompatActivity() {
         dblTapDesc = findViewById(R.id.dbltap_desc)
         holdDesc = findViewById(R.id.hold_desc)
         nonTouchDesc = findViewById(R.id.nontouch_desc)
+        profileDesc = findViewById(R.id.profile_desc)
         btStatus = findViewById(R.id.bt_status)
         resumeBtn = findViewById(R.id.resume_perm_btn)
 
@@ -104,6 +106,11 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.logtrips_off).setOnClickListener { setLogTrips(false) }
         findViewById<MaterialButton>(R.id.nontouch_on).setOnClickListener { setForceNonTouch(true) }
         findViewById<MaterialButton>(R.id.nontouch_off).setOnClickListener { setForceNonTouch(false) }
+        findViewById<MaterialButton>(R.id.profile_auto).setOnClickListener { setProfileOverride(ProfileOverride.AUTO) }
+        findViewById<MaterialButton>(R.id.profile_legacy).setOnClickListener { setProfileOverride(ProfileOverride.LEGACY) }
+        findViewById<MaterialButton>(R.id.profile_nk800).setOnClickListener { setProfileOverride(ProfileOverride.NK800) }
+        findViewById<MaterialButton>(R.id.profile_800mt).setOnClickListener { setProfileOverride(ProfileOverride.CFDL26_LAND) }
+        findViewById<MaterialButton>(R.id.profile_1000mtx).setOnClickListener { setProfileOverride(ProfileOverride.CFDL26_PORT) }
         findViewById<MaterialButton>(R.id.bt_settings_btn).setOnClickListener { BluetoothHelper.openBluetoothSettings(this) }
         resumeBtn.setOnClickListener { requestOverlayPermission() }
 
@@ -182,6 +189,12 @@ class SetupActivity : AppCompatActivity() {
         toast("Disable touchscreen: ${if (on) "on" else "off"}")
     }
 
+    private fun setProfileOverride(ov: ProfileOverride) {
+        ProfilePrefs.set(this, ov)
+        refreshOptions()
+        toast("Bike profile: ${ov.shortLabel}")
+    }
+
     private fun toast(msg: String) =
         Toast.makeText(this, "$msg (applies next connect)", Toast.LENGTH_SHORT).show()
 
@@ -205,6 +218,8 @@ class SetupActivity : AppCompatActivity() {
             "On — focus/knob UI so handlebar buttons work"
         else
             "Off — use the bike profile (touch dashes stay touch)"
+        val pov = ProfilePrefs.get(this)
+        profileDesc.text = "${pov.shortLabel} — ${pov.detail}"
 
         highlight(quality,
             R.id.quality_smooth to VideoQuality.SMOOTH,
@@ -250,6 +265,12 @@ class SetupActivity : AppCompatActivity() {
         highlight(AppSettings.forceNonTouch(this),
             R.id.nontouch_on to true,
             R.id.nontouch_off to false)
+        highlight(ProfilePrefs.get(this),
+            R.id.profile_auto to ProfileOverride.AUTO,
+            R.id.profile_legacy to ProfileOverride.LEGACY,
+            R.id.profile_nk800 to ProfileOverride.NK800,
+            R.id.profile_800mt to ProfileOverride.CFDL26_LAND,
+            R.id.profile_1000mtx to ProfileOverride.CFDL26_PORT)
     }
 
     /** Refresh the Bluetooth pairing status line shown in the helper card. */

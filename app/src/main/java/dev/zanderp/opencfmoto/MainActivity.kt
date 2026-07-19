@@ -105,8 +105,10 @@ class MainActivity : AppCompatActivity() {
             else -> ""
         }
         val touchNote = if (BikeProfileHolder.forceNonTouch) " [Disable touchscreen ON — focus/knob AA]" else ""
+        val ov = BikeProfileHolder.profileOverride
+        val ovNote = if (ov != ProfileOverride.AUTO) " [profile override: ${ov.shortLabel}]" else ""
         log("→ bike profile (QR ssid=${qr.ssid} modelId=${qr.modelId}): ${BikeProfileHolder.active.name} " +
-            "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi$note$touchNote")
+            "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi$note$touchNote$ovNote")
     }
 
     /** Start the Android Auto → bike projection for [qr]. Shared by the one-tap Connect reconnect
