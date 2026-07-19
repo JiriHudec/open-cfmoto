@@ -57,7 +57,7 @@ dash touchscreen.
 | 🛰️ **Trip computer + ride logging** | Live speed/distance/duration from GPS, auto-logs every ride, with a saved-trips list and route maps. |
 | 📐 **Smart resolution & orientation** | Auto-fits recognized dashes and learns unknown ones; manual landscape/portrait + SD/HD overrides. |
 | 🌗 **Map dark mode** | Day / Night / Auto theme for the dash map — Auto follows sunset (or your phone's theme). Toggle from Setup, Controls, or the Dash view. |
-| 🔋 **Battery & power tuning** | Frame-rate caps (Smooth / Balanced / Saver) to reduce heat and drain during long rides. |
+| 🔋 **Battery & power tuning** | Frame-rate caps (Smooth / Balanced / Saver) plus optional **Auto** (adapts bitrate/fps to heat & Wi‑Fi). |
 | 🛟 **Auto-recovery watchdog** | Detects a stalled or dropped dash and reconnects automatically — no Stop/Start. |
 | 🔄 **Seamless resume** | Stop the bike for a bit? Projection parks to save battery, watches for the bike, and re-projects on its own when it's back — screen off, phone stowed. |
 | 📱 **Whole-screen mirroring** | Optional: mirror your entire phone to the dash instead of Android Auto. |
@@ -255,7 +255,8 @@ own day/night map styles.
 
 This app runs a live video transcoder, so it always draws power and warms the phone. To manage that:
 
-- **Battery & power** — cap the frame rate: *Smooth* / *Balanced* / *Saver* (coolest). Keep the phone
+- **Battery & power** — cap the frame rate: *Smooth* / *Balanced* / *Saver* (coolest), or *Auto*
+  (adapts bitrate & fps to phone heat and bike Wi‑Fi). Defaults to **Balanced**. Keep the phone
   on the bike's USB charger and turn its screen **off** while riding (projection keeps running).
 - **Auto-connect on launch** — start projecting automatically when a paired bike's Wi‑Fi is in range.
 - **Auto-recovery watchdog** — if the dash drops or the stream stalls, reconnect automatically.

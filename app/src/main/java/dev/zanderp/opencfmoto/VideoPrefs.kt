@@ -43,9 +43,9 @@ enum class ScreenFit(val label: String) {
  * modes disable the controller entirely and pin the rate, exactly as before.
  */
 enum class PowerMode(val fps: Int, val label: String) {
-    AUTO(30, "Auto — adapts to heat & signal (recommended)"),
+    AUTO(30, "Auto — adapts to heat & signal"),
     SMOOTH(30, "Smooth — 30 fps (most battery)"),
-    BALANCED(24, "Balanced — 24 fps"),
+    BALANCED(24, "Balanced — 24 fps (recommended)"),
     SAVER(20, "Battery saver — 20 fps (coolest)"),
 }
 
@@ -107,8 +107,9 @@ object VideoPrefs {
     }
 
     fun power(ctx: Context): PowerMode {
-        val name = BikeScope.getString(prefs(ctx), ctx, KEY_POWER, PowerMode.AUTO.name)
-        return runCatching { PowerMode.valueOf(name!!) }.getOrDefault(PowerMode.AUTO)
+        // Default stays BALANCED until AUTO has more on-bike soak; riders can opt into Auto in Setup.
+        val name = BikeScope.getString(prefs(ctx), ctx, KEY_POWER, PowerMode.BALANCED.name)
+        return runCatching { PowerMode.valueOf(name!!) }.getOrDefault(PowerMode.BALANCED)
     }
 
     fun setPower(ctx: Context, mode: PowerMode) {
