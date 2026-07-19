@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
+import android.widget.SeekBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -25,6 +27,10 @@ import dev.zanderp.opencfmoto.aa.AaInput
  * and the toggle + entry point for handlebar-button control ([MediaButtonBridge]/[ButtonMappingActivity]).
  */
 class ControlsActivity : AppCompatActivity() {
+
+    private var volumeSeek: SeekBar? = null
+    private var volumeValue: TextView? = null
+    private var syncingVolumeUi = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +52,21 @@ class ControlsActivity : AppCompatActivity() {
                 NavLauncher.navigate(this, dest, LogBus::log)
             }
         }
+
+        // Volume slider — above the pad so riders can still set media/nav loudness when the bike's
+        // ▲/▼ are hijacked for Android Auto navigation.
+        volumeSeek = findViewById(R.id.seek_volume)
+        volumeValue = findViewById(R.id.tv_volume_value)
+        volumeSeek?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                volumeValue?.text = progress.toString()
+                if (!fromUser || syncingVolumeUi) return
+                MediaButtonBridge.setVolume(this@ControlsActivity, progress)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+        syncVolumeUi()
 
         // On-screen pad.
         findViewById<View>(R.id.btn_knob_back).setOnClickListener { scroll(-1) }
@@ -97,6 +118,25 @@ class ControlsActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.theme_day).setOnClickListener { setMapTheme(MapTheme.DAY) }
         findViewById<MaterialButton>(R.id.theme_night).setOnClickListener { setMapTheme(MapTheme.NIGHT) }
         highlightTheme(NightPrefs.theme(this))
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncVolumeUi()
+    }
+
+    /** Match the SeekBar to the live music stream (and bridge pin, when capturing). */
+    private fun syncVolumeUi() {
+        val seek = volumeSeek ?: return
+        val (now, max) = MediaButtonBridge.volumeLevels(this)
+        syncingVolumeUi = true
+        try {
+            if (seek.max != max) seek.max = max
+            seek.progress = now
+            volumeValue?.text = now.toString()
+        } finally {
+            syncingVolumeUi = false
+        }
     }
 
     private fun setMapTheme(theme: MapTheme) {

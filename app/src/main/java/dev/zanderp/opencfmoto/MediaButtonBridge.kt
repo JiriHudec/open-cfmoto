@@ -57,6 +57,11 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
     private var reasserted = false
     /** The user's own volume, restored when capture is turned off. */
     private var userVolume = -1
+    /**
+     * When true, the volume [ContentObserver] ignores stream changes (our own pin / Controls slider).
+     * Without this, moving the listening slider would fire ▲/▼ as AA navigation.
+     */
+    @Volatile private var ignoreVolumeChanges = false
     private var focusRequest: AudioFocusRequest? = null
     private var silence: AudioTrack? = null
 
@@ -294,17 +299,25 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
     // ── volume as a navigation source ────────────────────────────────────────────────────────────
 
     /**
-     * Pin the stream volume to the middle while capturing. The bike sends AVRCP *absolute* volume, so
-     * we read the DIRECTION of each change; parking at mid guarantees headroom both ways so every
-     * press registers (at the ends, a press in the pinned direction produces no change → no event).
+     * Pin the music stream while capturing. The bike sends AVRCP *absolute* volume, so we read the
+     * DIRECTION of each change. We park at the rider's listening level (clamped away from 0 / max)
+     * so nav prompts stay at the volume they chose on Controls; mid is only the fallback when we
+     * have no preference yet. At the extreme ends one nav direction can stop registering — the
+     * Controls slider hint covers that.
      */
     private fun pinVolume() {
         try {
             val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
             if (userVolume < 0) userVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-            pinnedVolume = (max / 2).coerceIn(1, max - 1)
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0)
-            log("[BTN] volume pinned at $pinnedVolume/$max (headroom both ways)")
+            val preferred = if (userVolume >= 0) userVolume else max / 2
+            pinnedVolume = preferred.coerceIn(1, (max - 1).coerceAtLeast(1))
+            ignoreVolumeChanges = true
+            try {
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0)
+            } finally {
+                handler.postDelayed({ ignoreVolumeChanges = false }, 150)
+            }
+            log("[BTN] volume pinned at $pinnedVolume/$max (listening=$userVolume)")
         } catch (e: Exception) {
             log("[BTN] pinVolume failed: $e")
         }
@@ -314,9 +327,50 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
     private fun unpinVolume() {
         pinnedVolume = -1
         if (userVolume >= 0) {
-            try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, userVolume, 0) } catch (_: Exception) {}
+            ignoreVolumeChanges = true
+            try {
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, userVolume, 0)
+            } catch (_: Exception) {
+            } finally {
+                handler.postDelayed({ ignoreVolumeChanges = false }, 150)
+            }
             userVolume = -1
         }
+    }
+
+    /**
+     * Set the phone's music volume from the Controls slider. While handlebar capture is on this
+     * also moves the AVRCP pin so nav prompts follow the slider without counting as ▲/▼ presses.
+     */
+    fun setListeningVolume(level: Int) {
+        try {
+            val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val v = level.coerceIn(0, max)
+            userVolume = v
+            ignoreVolumeChanges = true
+            try {
+                if (ButtonMode.isControlAa(context) && pinnedVolume >= 0) {
+                    pinnedVolume = v.coerceIn(1, (max - 1).coerceAtLeast(1))
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0)
+                } else {
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
+                }
+            } finally {
+                handler.postDelayed({ ignoreVolumeChanges = false }, 150)
+            }
+        } catch (e: Exception) {
+            log("[BTN] setListeningVolume failed: $e")
+        }
+    }
+
+    /** Current music volume and stream max (for the Controls SeekBar). */
+    fun volumeLevels(): Pair<Int, Int> {
+        val max = try { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 15 }
+        val now = when {
+            userVolume >= 0 -> userVolume
+            else -> try { audio.getStreamVolume(AudioManager.STREAM_MUSIC) } catch (_: Exception) { max / 2 }
+        }
+        return now.coerceIn(0, max) to max.coerceAtLeast(1)
     }
 
     /**
@@ -327,6 +381,7 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
         if (volumeObserver != null) return
         val obs = object : ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
+                if (ignoreVolumeChanges) return
                 val now = try { audio.getStreamVolume(AudioManager.STREAM_MUSIC) } catch (e: Exception) { return }
                 if (!ButtonMode.isControlAa(context) || pinnedVolume < 0) return
                 if (now == pinnedVolume) return   // our own re-pin, or nothing to do
@@ -336,7 +391,13 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
                 val dir = if (up) "UP" else "DOWN"
                 // Re-pin FIRST: the gesture handling below can take a while (BACK/HOME redraw the
                 // dash), and until we re-pin, a follow-up press is measured from the wrong base.
-                try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0) } catch (_: Exception) {}
+                ignoreVolumeChanges = true
+                try {
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, pinnedVolume, 0)
+                } catch (_: Exception) {
+                } finally {
+                    handler.postDelayed({ ignoreVolumeChanges = false }, 80)
+                }
 
                 // A big single write means the dash coalesced a double-tap into one jump — take the
                 // fast path and fire ×2 immediately. Otherwise let the time-window detector decide,
@@ -550,5 +611,32 @@ class MediaButtonBridge(private val context: Context, private val log: (String) 
         /** The live bridge (when Android Auto is running), so the settings toggle can reach it. */
         @Volatile var instance: MediaButtonBridge? = null
             private set
+
+        /**
+         * Music volume for the Controls slider — works even before AA starts (plain [AudioManager]).
+         * While the bridge is capturing handlebar volume for nav, updates go through
+         * [setListeningVolume] so they don't fire AA knob steps.
+         */
+        fun volumeLevels(context: Context): Pair<Int, Int> {
+            instance?.let { return it.volumeLevels() }
+            val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            val now = audio.getStreamVolume(AudioManager.STREAM_MUSIC).coerceIn(0, max)
+            return now to max
+        }
+
+        fun setVolume(context: Context, level: Int) {
+            val bridge = instance
+            if (bridge != null) {
+                bridge.setListeningVolume(level)
+                return
+            }
+            try {
+                val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, level.coerceIn(0, max), 0)
+            } catch (_: Exception) {
+            }
+        }
     }
 }
