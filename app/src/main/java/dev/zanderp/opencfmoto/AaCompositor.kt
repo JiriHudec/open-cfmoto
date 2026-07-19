@@ -247,29 +247,47 @@ class AaCompositor(private val log: (String) -> Unit) {
      */
     private fun computeViewport() {
         if (canvasW == 0 || canvasH == 0 || srcW == 0 || srcH == 0) return
+        // Inset by rider/profile screen margins so chrome (e.g. 800NK pull-down) stays black.
+        val mT = ScreenMargins.top.coerceIn(0, canvasH)
+        val mB = ScreenMargins.bottom.coerceIn(0, canvasH - mT)
+        val mL = ScreenMargins.left.coerceIn(0, canvasW)
+        val mR = ScreenMargins.right.coerceIn(0, canvasW - mL)
+        val areaW = (canvasW - mL - mR).coerceAtLeast(1)
+        val areaH = (canvasH - mT - mB).coerceAtLeast(1)
         val srcAspect = srcW.toFloat() / srcH
-        val canvasAspect = canvasW.toFloat() / canvasH
+        val areaAspect = areaW.toFloat() / areaH
         when (fitMode) {
             ScreenFit.STRETCH -> {
-                vpW = canvasW; vpH = canvasH
+                vpW = areaW; vpH = areaH
             }
             ScreenFit.FIT -> {
-                if (srcAspect < canvasAspect) {           // src narrower → fit height, bars left/right
-                    vpH = canvasH; vpW = Math.round(canvasH * srcAspect)
-                } else {                                  // src wider → fit width, bars top/bottom
-                    vpW = canvasW; vpH = Math.round(canvasW / srcAspect)
+                if (srcAspect < areaAspect) {
+                    vpH = areaH; vpW = Math.round(areaH * srcAspect)
+                } else {
+                    vpW = areaW; vpH = Math.round(areaW / srcAspect)
                 }
             }
             ScreenFit.FILL -> {
-                if (srcAspect < canvasAspect) {           // src narrower → fit width, crop top/bottom
-                    vpW = canvasW; vpH = Math.round(canvasW / srcAspect)
-                } else {                                  // src wider → fit height, crop left/right
-                    vpH = canvasH; vpW = Math.round(canvasH * srcAspect)
+                if (srcAspect < areaAspect) {
+                    vpW = areaW; vpH = Math.round(areaW / srcAspect)
+                } else {
+                    vpH = areaH; vpW = Math.round(areaH * srcAspect)
                 }
             }
         }
-        vpX = (canvasW - vpW) / 2
-        vpY = (canvasH - vpH) / 2
+        vpX = mL + (areaW - vpW) / 2
+        vpY = mT + (areaH - vpH) / 2
+    }
+
+    /** Re-apply [ScreenMargins] after the rider changes them mid-session. */
+    fun refreshMargins() {
+        handler.post {
+            computeViewport()
+            if (hasContent) drawFrame()
+            if (ScreenMargins.any) {
+                log("[COMPOSITOR] screen margins: ${ScreenMargins.summary()}")
+            }
+        }
     }
 
     /** Set the live-frame cap (frames/sec) from the user's [dev.zanderp.opencfmoto.PowerMode]. */

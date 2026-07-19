@@ -25,16 +25,41 @@
             android:src="@drawable/ic_ride"
             android:tint="@color/brand_orange" />
 
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:layout_marginStart="10dp"
-            android:text="OpenCfMoto"
-            android:textColor="@color/text_primary"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.01" />
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/brand_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="OpenCfMoto"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.01" />
+
+            <TextView
+                android:id="@+id/brand_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                tools:text="v1.0.16" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_about"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="6dp"
+            android:text="About"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -114,6 +139,25 @@
             android:layout_height="62dp"
             android:layout_marginTop="16dp"
             android:text="Connect" />
+
+        <!-- High-traffic: full-width under Connect so they can't be missed. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_hud_view"
+            style="@style/Widget.OpenCfMoto.Button.Tonal"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="10dp"
+            android:text="Dash view — watch &amp; control"
+            android:textSize="15sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_controls"
+            style="@style/Widget.OpenCfMoto.Button.Tonal"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="6dp"
+            android:text="Controls — D‑pad &amp; handlebar"
+            android:textSize="15sp" />
 
         <!-- Primary controls -->
         <LinearLayout
@@ -221,24 +265,6 @@
                 android:text="Go" />
         </LinearLayout>
 
-        <!-- View + control the dash from inside the app (in-app mirror of the AA video). -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_hud_view"
-            style="@style/Widget.OpenCfMoto.Button.Text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="View &amp; control dash" />
-
-        <!-- On-screen D-pad / knob + navigate box + handlebar-button mapping. -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_controls"
-            style="@style/Widget.OpenCfMoto.Button.Text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Controls &amp; handlebar buttons" />
-
         <!-- Tips panel: fills the space and earns it (battery/how-to guidance). -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/tips_panel"
@@ -266,10 +292,43 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="• Keep the phone on the bike's USB charger — the live video runs warm.\n• Press the phone's power button to turn its screen OFF while riding; projection keeps running and saves battery.\n• Handlebar media/call buttons work once the phone is paired to the bike over Bluetooth.\n• In Setup you can tune battery (fps), screen fit, and try the sharper HD resolution."
+                    android:text="• Dash view — watch and touch Android Auto on the phone while it's on the bike.\n• Controls — on-screen D-pad/knob and map handlebar ▲/▼/Enter to Android Auto.\n• Keep the phone on the bike's USB charger — the live video runs warm.\n• Press the phone's power button to turn its screen OFF while riding; projection keeps running.\n• Pair Bluetooth to the bike for handlebar buttons. Tune battery/fit/HD in Setup."
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:lineSpacingExtra="4dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_check_update"
+                    style="@style/Widget.OpenCfMoto.Segment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Check for update" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_problem_report"
+                    style="@style/Widget.OpenCfMoto.Segment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Report a problem" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_about_page"
+                    style="@style/Widget.OpenCfMoto.Segment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="About &amp; credits" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_donate"
+                    style="@style/Widget.OpenCfMoto.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Donate"
+                    android:textSize="13sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

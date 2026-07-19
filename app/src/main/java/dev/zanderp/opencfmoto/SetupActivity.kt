@@ -111,6 +111,14 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.profile_nk800).setOnClickListener { setProfileOverride(ProfileOverride.NK800) }
         findViewById<MaterialButton>(R.id.profile_800mt).setOnClickListener { setProfileOverride(ProfileOverride.CFDL26_LAND) }
         findViewById<MaterialButton>(R.id.profile_1000mtx).setOnClickListener { setProfileOverride(ProfileOverride.CFDL26_PORT) }
+        findViewById<MaterialButton>(R.id.profile_nk_adv).setOnClickListener { setProfileOverride(ProfileOverride.NK_ADV) }
+        findViewById<MaterialButton>(R.id.profile_clc450).setOnClickListener { setProfileOverride(ProfileOverride.CLC450) }
+        findViewById<MaterialButton>(R.id.btn_screen_margins).setOnClickListener { ScreenMarginsActivity.start(this) }
+        findViewById<MaterialButton>(R.id.transport_auto).setOnClickListener { setTransport(WifiTransport.AUTO) }
+        findViewById<MaterialButton>(R.id.transport_ap).setOnClickListener { setTransport(WifiTransport.AP) }
+        findViewById<MaterialButton>(R.id.transport_p2p).setOnClickListener { setTransport(WifiTransport.P2P) }
+        findViewById<MaterialButton>(R.id.secrets_on).setOnClickListener { setSecrets(true) }
+        findViewById<MaterialButton>(R.id.secrets_off).setOnClickListener { setSecrets(false) }
         findViewById<MaterialButton>(R.id.bt_settings_btn).setOnClickListener { BluetoothHelper.openBluetoothSettings(this) }
         resumeBtn.setOnClickListener { requestOverlayPermission() }
 
@@ -195,6 +203,23 @@ class SetupActivity : AppCompatActivity() {
         toast("Bike profile: ${ov.shortLabel}")
     }
 
+    private fun setTransport(t: WifiTransport) {
+        AppSettings.setTransport(this, t)
+        refreshOptions()
+        toast("Wi‑Fi transport: ${t.label}")
+    }
+
+    private fun setSecrets(on: Boolean) {
+        AppSettings.setIncludeSecretsInLogs(this, on)
+        refreshOptions()
+        Toast.makeText(
+            this,
+            if (on) "Shared logs will include secrets — turn off before posting publicly"
+            else "Log redaction on",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
     private fun toast(msg: String) =
         Toast.makeText(this, "$msg (applies next connect)", Toast.LENGTH_SHORT).show()
 
@@ -270,7 +295,20 @@ class SetupActivity : AppCompatActivity() {
             R.id.profile_legacy to ProfileOverride.LEGACY,
             R.id.profile_nk800 to ProfileOverride.NK800,
             R.id.profile_800mt to ProfileOverride.CFDL26_LAND,
-            R.id.profile_1000mtx to ProfileOverride.CFDL26_PORT)
+            R.id.profile_1000mtx to ProfileOverride.CFDL26_PORT,
+            R.id.profile_nk_adv to ProfileOverride.NK_ADV,
+            R.id.profile_clc450 to ProfileOverride.CLC450)
+        val transport = AppSettings.transport(this)
+        findViewById<android.widget.TextView>(R.id.transport_desc).text = transport.label
+        highlight(transport,
+            R.id.transport_auto to WifiTransport.AUTO,
+            R.id.transport_ap to WifiTransport.AP,
+            R.id.transport_p2p to WifiTransport.P2P)
+        val secrets = AppSettings.includeSecretsInLogs(this)
+        findViewById<android.widget.TextView>(R.id.secrets_desc).text =
+            if (secrets) "On — passwords/serials stay in shared logs"
+            else "Off — passwords and serials are redacted (recommended)"
+        highlight(secrets, R.id.secrets_on to true, R.id.secrets_off to false)
     }
 
     /** Refresh the Bluetooth pairing status line shown in the helper card. */

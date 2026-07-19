@@ -91,7 +91,7 @@ class MainActivity : AppCompatActivity() {
      *  which must be set before AA starts. CLIENT_INFO refines it later during the PXC handshake. */
     private fun applyProfile(qr: QrData) {
         AppSettings.applyToHolder(this)
-        BikeProfileHolder.active = BikeProfiles.selectByQr(qr)
+        BikeProfileHolder.active = BikeProfiles.selectByQr(qr, this)
         DashMemory.setLastDashTouch(this, BikeProfileHolder.advertisesScreenTouch)
         val userOverride = VideoPrefs.resolutionOverride(this, BikeProfileHolder.active)
         // In AUTO mode, if a previous session revealed this dash is a different orientation than the
@@ -205,9 +205,19 @@ class MainActivity : AppCompatActivity() {
         // Icons are set here rather than in XML: in this AGP/compileSdk setup, library (res-auto)
         // attributes like app:icon don't resolve in layouts, so we assign them programmatically.
         (connectBtn as? MaterialButton)?.setIconResource(R.drawable.ic_power)
+        findViewById<android.widget.TextView>(R.id.brand_version).text =
+            "v${BuildConfig.VERSION_NAME}"
         (findViewById<View>(R.id.btn_aa_start) as? MaterialButton)?.setIconResource(R.drawable.ic_qr)
         (findViewById<View>(R.id.btn_mirror_start) as? MaterialButton)?.setIconResource(R.drawable.ic_cast)
         (findViewById<View>(R.id.btn_aa_stop) as? MaterialButton)?.setIconResource(R.drawable.ic_stop)
+        (findViewById<View>(R.id.btn_hud_view) as? MaterialButton)?.apply {
+            setIconResource(R.drawable.ic_cast)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+        }
+        (findViewById<View>(R.id.btn_controls) as? MaterialButton)?.apply {
+            setIconResource(R.drawable.ic_devices)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+        }
         (findViewById<View>(R.id.btn_setup) as? MaterialButton)?.apply {
             setIconResource(R.drawable.ic_settings)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
@@ -304,6 +314,7 @@ class MainActivity : AppCompatActivity() {
             ProjectionHolder.projection = null
             ProjectionService.stop(this)
             BikeWifi.leave(this, ::log)
+            BikeWifiP2p.stop(::log)
             ConnectionState.set(Phase.STOPPED, "")
         }
 
@@ -328,6 +339,18 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_share_log).setOnClickListener { shareLog() }
 
         findViewById<Button>(R.id.btn_setup).setOnClickListener { SetupActivity.start(this) }
+        findViewById<View>(R.id.btn_about).setOnClickListener { AboutActivity.start(this) }
+        findViewById<View>(R.id.brand_title).setOnClickListener { AboutActivity.start(this) }
+        findViewById<View>(R.id.btn_about_page).setOnClickListener { AboutActivity.start(this) }
+        findViewById<View>(R.id.btn_check_update).setOnClickListener { checkUpdateManual() }
+        findViewById<View>(R.id.btn_problem_report).setOnClickListener { reportProblem() }
+        findViewById<View>(R.id.btn_donate).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(AboutActivity.URL_KOFI)))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Couldn't open donate link", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         findViewById<Button>(R.id.btn_clear).setOnClickListener {
             LogBus.clear()
@@ -358,6 +381,7 @@ class MainActivity : AppCompatActivity() {
         // Retry auto-connect on resume: after finishing first-run setup, or once the bike's Wi-Fi
         // comes into range shortly after launch. Guarded so it only ever starts one attempt.
         if (SetupActivity.hasSeen(this)) maybeAutoConnect()
+        maybeCheckUpdate()
         maybeResumeFromParked(intent)
     }
 
@@ -452,6 +476,7 @@ class MainActivity : AppCompatActivity() {
             // NOTE: AndroidAutoService is intentionally NOT stopped here — it is a foreground service
             // meant to keep running when the phone is backgrounded/locked. Use "Stop Android Auto".
             BikeWifi.leave(this, ::log)
+            BikeWifiP2p.stop(::log)
         }
         super.onDestroy()
     }
@@ -622,6 +647,16 @@ class MainActivity : AppCompatActivity() {
      */
     private fun joinWifi(qr: QrData, gateOnAaSteady: Boolean) {
         ConnectionState.set(Phase.JOINING_WIFI)
+        val transport = AppSettings.transport(this)
+        val useP2p = when (transport) {
+            WifiTransport.P2P -> true
+            WifiTransport.AP -> false
+            WifiTransport.AUTO -> qr.supportsP2p && !qr.supportsAp
+        }
+        if (useP2p) {
+            joinWifiP2p(qr, gateOnAaSteady)
+            return
+        }
         BikeWifi.join(
             context = applicationContext,
             ssid = qr.ssid,
@@ -643,6 +678,55 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onLost = { LogBus.log("bike network lost") },
+            log = LogBus::log,
+        )
+    }
+
+    /** Wi‑Fi Direct Group Owner path (CL‑C450 / some DIRECT- SSIDs). */
+    private fun joinWifiP2p(qr: QrData, gateOnAaSteady: Boolean) {
+        LogBus.log("→ joining via Wi‑Fi Direct (P2P)")
+        BikeWifiP2p.connect(
+            context = applicationContext,
+            qr = qr,
+            onConnected = { bindIp, gatewayIp ->
+                if (gateOnAaSteady) {
+                    LogBus.log("→ P2P bound (waiting for AA video); bike=${gatewayIp.hostAddress}")
+                    BikeLink.markP2pReady(bindIp, gatewayIp)
+                } else {
+                    ConnectionState.set(Phase.PXC_CONNECTING)
+                    LogBus.log("→ P2P bound; starting EasyConn PXC flow …")
+                    try {
+                        (BikeLink.prober ?: prober).start(
+                            network = null,
+                            gatewayOverride = gatewayIp,
+                            bindIpOverride = bindIp,
+                        )
+                    } catch (e: Exception) {
+                        LogBus.log("prober start failed: $e")
+                    }
+                }
+            },
+            onFailed = { reason ->
+                LogBus.log("P2P join failed: $reason — falling back to AP join")
+                BikeWifi.join(
+                    context = applicationContext,
+                    ssid = qr.ssid,
+                    psk = qr.pwd,
+                    onAvailable = { network ->
+                        if (gateOnAaSteady) BikeLink.markWifiReady(network)
+                        else {
+                            ConnectionState.set(Phase.PXC_CONNECTING)
+                            try {
+                                (BikeLink.prober ?: prober).start(network)
+                            } catch (e: Exception) {
+                                LogBus.log("prober start failed: $e")
+                            }
+                        }
+                    },
+                    onLost = { LogBus.log("bike network lost") },
+                    log = LogBus::log,
+                )
+            },
             log = LogBus::log,
         )
     }
@@ -737,6 +821,121 @@ class MainActivity : AppCompatActivity() {
             log("log saved: ${file.absolutePath} (${file.length()} bytes)")
         } catch (e: Exception) {
             log("share failed: $e")
+        }
+    }
+
+    private fun maybeCheckUpdate() {
+        Thread {
+            val release = try {
+                UpdateChecker.check(this, manual = false)
+            } catch (_: Exception) {
+                null
+            } ?: return@Thread
+            runOnUiThread { showUpdateDialog(release) }
+        }.start()
+    }
+
+    private fun checkUpdateManual() {
+        Toast.makeText(this, "Checking for update…", Toast.LENGTH_SHORT).show()
+        Thread {
+            val release = UpdateChecker.check(this, manual = true)
+            runOnUiThread {
+                if (release == null) {
+                    Toast.makeText(this, "You're up to date (or offline)", Toast.LENGTH_SHORT).show()
+                } else {
+                    showUpdateDialog(release)
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateDialog(release: UpdateChecker.Release) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Update ${release.version}")
+            .setMessage(release.notes.ifBlank { "A newer OpenCfMoto release is available." }.take(1500))
+            .setPositiveButton("Download") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Couldn't open download link", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Skip") { _, _ -> UpdateChecker.skip(this, release.version) }
+            .setNeutralButton("Later", null)
+            .show()
+    }
+
+    private fun reportProblem() {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val problem = android.widget.EditText(this).apply {
+            hint = "What went wrong?"
+            minLines = 3
+            setPadding(pad, pad, pad, pad)
+        }
+        val model = android.widget.EditText(this).apply {
+            hint = "Bike model (e.g. 800NK Advanced)"
+            setText(BikeMemory.lastBikeName(this@MainActivity).orEmpty())
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        val year = android.widget.EditText(this).apply {
+            hint = "Year (optional)"
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(problem)
+            addView(model)
+            addView(year)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Report a problem")
+            .setMessage("Builds a shareable report with diagnostics + recent log (secrets redacted unless enabled in Setup).")
+            .setView(box)
+            .setPositiveButton("Share") { _, _ ->
+                shareProblemReport(
+                    problem.text.toString(),
+                    model.text.toString(),
+                    year.text.toString(),
+                )
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun shareProblemReport(problem: String, model: String, year: String) {
+        try {
+            val diagnostics = buildString {
+                appendLine("app=${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("profile=${BikeProfileHolder.active.name}")
+                appendLine("override=${BikeProfileHolder.profileOverride}")
+                appendLine("transport=${AppSettings.transport(this@MainActivity).label}")
+                appendLine("margins=${ScreenMargins.summary()}")
+                appendLine("forceNonTouch=${BikeProfileHolder.forceNonTouch}")
+                appendLine("ssid=${BikeMemory.lastQr(this@MainActivity)?.ssid ?: "—"}")
+                appendLine("phase=${ConnectionState.phase} ${ConnectionState.detail}")
+            }
+            val text = ProblemReport.file(
+                problem = problem.ifBlank { "(not specified)" },
+                model = model,
+                year = year,
+                diagnostics = diagnostics,
+                log = LogBus.snapshot(),
+            )
+            val dir = File(cacheDir, "logs").apply { mkdirs() }
+            val file = File(dir, "opencfmoto-report.txt")
+            file.writeText(text)
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, ProblemReport.subject(model, BuildConfig.VERSION_NAME))
+                putExtra(Intent.EXTRA_TEXT, ProblemReport.body(problem, model, year, diagnostics))
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(send, "Share problem report"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't share report: $e", Toast.LENGTH_LONG).show()
         }
     }
 

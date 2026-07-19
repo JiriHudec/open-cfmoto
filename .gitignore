@@ -20,3 +20,9 @@ logs/
 
 # The built APK is distributed via GitHub Releases (not committed — keeps the repo small).
 *.apk
+
+# Scratch copies of upstream fork sources used while porting.
+.port-src/
+
+# Local working notes only — fork scans, WIP research. Never ship to main.
+docs/work/

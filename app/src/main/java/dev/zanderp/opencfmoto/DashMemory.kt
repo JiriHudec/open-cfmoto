@@ -1,15 +1,15 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Alexandru <https://alexandru.rocks> and the OpenCfMoto contributors.
+// Part of OpenCfMoto. Free software under the GNU AGPL v3 or later; see LICENSE and NOTICE.
 package dev.zanderp.opencfmoto
 
 import android.content.Context
 
 /**
- * Remembers the canvas size each dash asks for (its `REQ_CONFIG_CAPTURE` width×height), keyed by
- * bike SSID, so the app can auto-pick the right Android Auto orientation for bikes we don't have a
- * built-in profile for.
+ * Remembers the canvas size each dash asks for (`REQ_CONFIG_CAPTURE` width×height), keyed by SSID.
  *
- * The dash only reveals its shape *during* a session — after Android Auto's resolution is already
- * fixed — so the first connection to an unknown portrait dash may be letterboxed. We record the
- * observed shape here; on the next connect [specFor] uses it to flip the AA orientation to match.
+ * On the next connect [specFor] / [BikeProfiles.selectByQr] can pick an AA resolution that fits the
+ * panel at 1:1 (LearnedPanels-style), not just flip portrait/landscape.
  */
 object DashMemory {
     private const val PREFS = "opencfmoto_bike"
@@ -19,48 +19,60 @@ object DashMemory {
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /**
-     * Remember whether the last dash we connected to is a touchscreen. Lets the Controls screen warn
-     * that handlebar-button navigation is pointless on a touch dash (Android Auto runs its touch UI,
-     * which has no focus cursor for the rotary knob to move) even before this session connects.
-     */
     fun setLastDashTouch(ctx: Context, touch: Boolean) {
         prefs(ctx).edit().putBoolean(KEY_LAST_TOUCH, touch).apply()
     }
 
-    /** Whether the last connected dash was a touchscreen, or null if we've never connected. */
     fun lastDashTouch(ctx: Context): Boolean? {
         val p = prefs(ctx)
         return if (p.contains(KEY_LAST_TOUCH)) p.getBoolean(KEY_LAST_TOUCH, false) else null
     }
 
-    /** Record the dash's requested canvas for [ssid] (ignored if degenerate). */
     fun observe(ctx: Context, ssid: String?, w: Int, h: Int) {
         if (ssid.isNullOrBlank() || w <= 0 || h <= 0) return
-        prefs(ctx).edit().putString(KEY_PREFIX + ssid, "${w}x${h}").apply()
+        val key = KEY_PREFIX + ssid
+        val now = "${w}x$h"
+        val prior = prefs(ctx).getString(key, null)
+        prefs(ctx).edit().putString(key, now).apply()
+        if (prior != now) {
+            LogBus.log("[panel] learned: this bike's screen is $now — next connect will fit AA to it")
+        }
     }
 
-    /** The last-seen canvas (w,h) for [ssid], or null if we've never connected to it. */
     fun get(ctx: Context, ssid: String?): Pair<Int, Int>? {
         if (ssid.isNullOrBlank()) return null
         val v = prefs(ctx).getString(KEY_PREFIX + ssid, null) ?: return null
         val parts = v.split("x")
         val w = parts.getOrNull(0)?.toIntOrNull() ?: return null
         val h = parts.getOrNull(1)?.toIntOrNull() ?: return null
-        return w to h
+        return if (w in 1..8192 && h in 1..8192) w to h else null
     }
 
     /**
-     * An Android Auto spec derived from the remembered dash shape for [ssid], or null when we have no
-     * observation or the [profile] already targets the correct orientation (so its proven resolution
-     * is kept). Only flips orientation — using the conservative proven SD sizes, since HD can
-     * black-screen on some dashes; the rider can bump to HD manually in Setup.
+     * Pick an AA resolution that can hold [w]×[h] at 1:1 on one axis (see open-cflink LearnedPanels).
+     * Returns null when no standard size fits cleanly — caller keeps the profile guess.
+     */
+    fun bestFit(w: Int, h: Int): AaResolution? {
+        val cw = w and 0xFFF0
+        val ch = h and 0xFFF0
+        val exact = AaResolution.entries.filter { r ->
+            (r.w == cw && r.h >= ch) || (r.h == ch && r.w >= cw)
+        }
+        return exact.minByOrNull { (it.w - cw).toLong() * (it.h - ch) + (it.w - cw) + (it.h - ch) }
+    }
+
+    /**
+     * AA spec from remembered geometry. Prefers exact [bestFit]; else orientation flip to SD sizes.
      */
     fun specFor(ctx: Context, ssid: String?, profile: BikeProfile): AaVideoSpec? {
         val (w, h) = get(ctx, ssid) ?: return null
+        bestFit(w, h)?.let { res ->
+            if (res == profile.aaVideo.resolution && profile.panelSize == w to h) return null
+            return AaVideoSpec(res, dpi = profile.aaVideo.dpi)
+        }
         val dashPortrait = h > w
         val profilePortrait = profile.aaVideo.height > profile.aaVideo.width
-        if (dashPortrait == profilePortrait) return null  // profile orientation already matches
+        if (dashPortrait == profilePortrait) return null
         return if (dashPortrait) AaVideoSpec(AaResolution.PORTRAIT_720x1280, dpi = 240)
         else AaVideoSpec(AaResolution.LANDSCAPE_800x480, dpi = 160)
     }

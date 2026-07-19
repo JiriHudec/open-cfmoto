@@ -34,11 +34,10 @@ dash touchscreen.
 
 ---
 
-> ⚠️ **Community project — not affiliated with or endorsed by CFMoto.** Developed and tested against
-> CFMoto **800MT** and **1000 MT‑X** dashes, with community support for **CFDL16-class** dashes
-> (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C). Other bikes/phones may need a retry or aren't
-> supported yet. Don't rely on it for critical navigation — set your route **before** you ride. Use at
-> your own risk.
+> ⚠️ **Community project — not affiliated with or endorsed by CFMoto.** If the dash shows a
+> **MotoPlay / EasyConnect QR**, OpenCfMoto can try to connect — **no T‑BOX required**, US and
+> international. Full model list: **[Supported bikes](docs/SUPPORTED-BIKES.md)**. Don't rely on it
+> for critical navigation — set your route **before** you ride. Use at your own risk.
 
 ---
 
@@ -47,39 +46,38 @@ dash touchscreen.
 | | |
 | --- | --- |
 | 🗺️ **Android Auto on the dash** | Relays Google Maps / Waze / any AA app to the MotoPlay screen over Wi‑Fi. |
-| 👆 **Multi-touch** | Two-finger pinch-to-zoom and full tap/scroll straight from the dash touchscreen. |
-| 📺 **In-app Dash view** | Watch and drive the live dash from inside the app — touch, on-screen pad, and a fullscreen mode — handy for setting up nav before you ride. |
-| 🎛️ **Handlebar buttons drive AA** | On touchless dashes, the bike's ▲/▼/enter buttons navigate Android Auto over Bluetooth (rotary knob / select / back / home) — every gesture remappable. |
-| 🕹️ **On-screen pad + Navigate-to** | In-app D-pad + rotary knob and a "Navigate to…" box push a route to the dash without touching it; map a handlebar button to a saved place for one-press turn-by-turn. |
+| 👆 **Multi-touch** | Two-finger pinch-to-zoom and full tap/scroll straight from the dash touchscreen (ghost-touch filter for noisy digitizers). |
+| 📺 **Dash view** | Big home-screen button — watch and drive the live dash from the phone (touch, pad, fullscreen). |
+| 🎛️ **Controls** | Big home-screen button — on-screen D-pad/knob, media volume, and handlebar-button mapping. |
+| 🕹️ **Handlebar buttons → AA** | On touchless / focus-mode dashes, ▲/▼/Enter navigate Android Auto over Bluetooth — every gesture remappable; Select-hold → Home. |
+| 🧭 **Navigate-to + saved places** | Type a destination or map a handlebar button to a saved place for one-press turn-by-turn. |
 | 🎙️ **Voice / Assistant** | Streams your (helmet) mic to Android Auto so "Hey Google" sets a destination hands-free. |
-| ⚡ **One-tap Connect & Auto-connect** | Remembers your bike; reconnects on launch automatically when it's in range (toggleable). |
-| 🏍️ **Garage (multiple bikes)** | Keep every bike you own in one place — give each a name and photo, and each remembers its own display, resolution, power, and button settings. |
-| 🛰️ **Trip computer + ride logging** | Live speed/distance/duration from GPS, auto-logs every ride, with a saved-trips list and route maps. |
-| 📐 **Smart resolution & orientation** | Auto-fits recognized dashes and learns unknown ones; manual landscape/portrait + SD/HD overrides. |
-| 🌗 **Map dark mode** | Day / Night / Auto theme for the dash map — Auto follows sunset (or your phone's theme). Toggle from Setup, Controls, or the Dash view. |
-| 🔋 **Battery & power tuning** | Frame-rate caps (Smooth / Balanced / Saver) plus optional **Auto** (adapts bitrate/fps to heat & Wi‑Fi). |
-| 🛟 **Auto-recovery watchdog** | Detects a stalled or dropped dash and reconnects automatically — no Stop/Start. |
-| 🔄 **Seamless resume** | Stop the bike for a bit? Projection parks to save battery, watches for the bike, and re-projects on its own when it's back — screen off, phone stowed. |
-| 📱 **Whole-screen mirroring** | Optional: mirror your entire phone to the dash instead of Android Auto. |
-| 🧰 **In-app diagnostics** | Live log panel with one-tap share for troubleshooting. |
+| ⚡ **One-tap Connect & Auto-connect** | Remembers your bike; reconnects on launch when in range; Wi‑Fi join timeout + auto re-join after ignition cycles. |
+| 📶 **Wi‑Fi AP or Direct (P2P)** | Normal hotspot join, or **Wi‑Fi Direct** for dashes that are Group Owners (e.g. **CL‑C450**). Setup: Auto / AP / P2P. |
+| 🖼️ **Screen margins** | Dedicated page — inset Android Auto from top/bottom/left/right (e.g. blank the 800NK Advanced MotoPlay pull-down). |
+| 🏍️ **Garage (multiple bikes)** | Name + photo per bike; each keeps its own display, resolution, power, and button settings. |
+| 🛰️ **Trip computer + ride logging** | Live speed/distance/duration from GPS, auto-logs every ride, saved trips + route maps. |
+| 📐 **Smart resolution & learned panels** | Auto-fits recognized dashes; remembers measured panel size and picks a better AA resolution next connect. |
+| 🌗 **Map dark mode** | Day / Night / Auto — from Setup, Controls, or Dash view; applies live. |
+| 🔋 **Battery & power tuning** | Smooth / Balanced / Saver + **Auto** (adapts to heat & Wi‑Fi). |
+| 🛟 **Auto-recovery & seamless resume** | Stalled/dropped dash reconnects; long stop parks AA and re-projects when the bike returns. |
+| 🔄 **In-app updates** | Optional nag when a newer GitHub Release is available (Download / Skip / Later). |
+| 🧰 **Diagnostics & problem report** | Live logs (secrets redacted by default), Share Logs, and Setup → **Report a problem**. |
+| 📱 **Whole-screen mirroring** | Optional: mirror the entire phone instead of Android Auto. |
 
 ---
 
 ## 📋 What you need
 
-- **A CFMoto motorcycle with a MotoPlay / EasyConnect dash.**
-  Confirmed working: **800MT** (CFDL26) and **1000 MT‑X**. Community-supported **CFDL16-class** dashes
-  (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) — these are typically **non‑touch**, so you
-  drive Android Auto with the **handlebar buttons** and the in-app pad (see
-  [Handlebar & on-screen controls](#-handlebar--on-screen-controls)). Other models may work partially —
-  the app learns unrecognized dashes after the first connect (see
-  [Resolution & orientation](#-resolution--orientation)).
+- **A CFMoto (or CFMoto scooter / ATV) whose dash can show a MotoPlay / EasyConnect QR.**
+  **No T‑BOX required.** Works on **US and international** units. See the full list:
+  **[Supported bikes](docs/SUPPORTED-BIKES.md)**. Touch dashes use the screen; non‑touch /
+  focus-mode bikes use **Controls** + handlebar buttons. Unknown dashes are learned after the first
+  connect.
 - **An Android phone**, Android **10 or newer**.
-- **Google Android Auto** installed and set up once (see [step 3](#3-one-time-android-auto-setup)). AA
-  is what runs Maps/Waze — OpenCfMoto relays its screen to the bike.
-- **The OpenCfMoto app** (`app-debug.apk`) — sideloaded (see [step 2](#2-install-the-app)).
-- A **mobile-data plan** is recommended: the phone joins the bike's Wi‑Fi for the dash link, so live
-  maps/traffic come over cellular.
+- **Google Android Auto** set up once (see [step 3](#3-one-time-android-auto-setup)).
+- **OpenCfMoto** from [Releases](https://github.com/zanderp/open-cfmoto/releases/latest) (sideload).
+- A **mobile-data plan** is recommended: the phone joins the bike's Wi‑Fi, so maps/traffic use cellular.
 
 No root, no VPN, no PC required to ride.
 
@@ -87,44 +85,37 @@ No root, no VPN, no PC required to ride.
 
 ## 🏍️ Supported bikes
 
-OpenCfMoto speaks the **CFMoto MotoPlay** protocol — the same phone-projection system the official
-**CFMOTO RIDE** app uses. Any bike with a MotoPlay-capable dash is a candidate: generally **2024+**
-models fitted with a **T‑BOX**. Some need a one-time **dash OTA update** (triggered from the CFMOTO
-RIDE app) before MotoPlay appears.
+**→ Full list (source of truth): [docs/SUPPORTED-BIKES.md](docs/SUPPORTED-BIKES.md)**  
+(same content as Setup → Supported bikes in the app)
+
+**Rule:** if the dash shows a **pairing QR**, try OpenCfMoto. T‑BOX / CFMOTO RIDE subscription is
+**not** required. US CRCP dashes and international EasyConnect dashes both work.
 
 <p>
 <img src="docs/screenshots/12_supported_bikes.png" width="240" alt="In-app supported bikes list"/>
 </p>
 
-**✅ Confirmed working with OpenCfMoto**
+### Confirmed with OpenCfMoto
 
-- **800MT** (MT‑X / Explore) — landscape touchscreen (CFDL26)
-- **1000 MT‑X** — portrait CFDL26; **handlebar-primary** (TFT touch is locked by default on the bike —
-  unlock it in the dash UI if you want finger control; Android Auto runs in focus/knob mode so ▲/▼/Enter work)
-- **800NK** (CRCP / sdk 0.9.23.x) — non‑touch; dual PXC heartbeat on CAR_CTRL + CAR_DATA keeps the link stable
-- **450SR** — non‑touch dash (CFDL16); driven with the handlebar buttons + on-screen pad
+800MT (MT‑X / Explore / Explore GT) · 1000 MT‑X · 800NK (US CRCP) · 800NK Advanced · 450SR (+ SR‑S /
+TC) · 450CL‑C / CL‑C450 · **150SC** scooter
 
-**🧪 MotoPlay-equipped — should work (untested; reports welcome)**
+### Full list (summary)
 
 | Family | Models |
 | --- | --- |
-| **Naked (NK)** | 125NK · 450NK · 675NK · 800NK (Advanced / Sport) |
-| **Sport (SR)** | 450SR (2024+) · 450SR‑S · 450SR TC · 675SR‑R |
-| **Touring / Adventure (MT)** | 450MT · 700MT · 700MT Adventure · 800MT‑X · 800MT Explore · 800MT Explore GT |
-| **Cruiser (CL)** | 450CL‑C |
-| **ATV / SSV (TFT dash)** | CFORCE 800 (2024+) · CFORCE 1000 (2024+) |
+| **Naked (NK)** | 125NK · 450NK · 675NK · 800NK · 800NK Advanced · 800NK Sport · 800NK (US CRCP) |
+| **Sport (SR)** | 300SR · 450SR · 450SR‑S · 450SR TC · 500SR VOOM · 675SR · 675SR‑R |
+| **Touring / Adventure (MT)** | 450MT · 700MT · 700MT Adventure · 800MT‑X · 800MT Explore · 800MT Explore GT · 1000 MT‑X |
+| **Cruiser (CL)** | 450CL‑C · CL‑C450 |
+| **Scooter** | **150SC** |
+| **ATV / SSV (TFT)** | CFORCE 800 · CFORCE 850 Touring · CFORCE 1000 · CFORCE 1000 Touring |
+| **Other** | U10 Pro (where the dash offers the QR) |
 
-**🚫 Not MotoPlay-equipped** (per CFMoto): 800MT Sport, 800MT Touring, 450SR World Champion Edition,
-700CL‑X (Adventure / Heritage / Sport).
+Usually **no** projection QR (won’t work unless your unit has one anyway): 800MT Sport · 800MT
+Touring · 450SR World Champion Edition · 700CL‑X · PAPIO.
 
-> **Availability varies by model year and region.** Quickest check: if **MotoPlay** shows up as a
-> subscription option in the official **CFMOTO RIDE** app for your bike, the dash speaks the protocol
-> OpenCfMoto uses. **Touch** dashes are driven with the screen; **non‑touch** dashes with the
-> handlebar buttons + on-screen pad. Tried a bike that isn't listed as confirmed?
-> Tell us in **[Discord](https://discord.gg/xRt5yZy2U)** so we can add it.
-
-Sources: CFMoto RIDE app model availability tables ([CFMOTO Benelux](https://cfmotobenelux.com/en/cfmoto-ride-app/),
-[CFMOTO Canada](https://cfmoto.ca/en/cfmoto-ride-app)) and the CFMoto RIDE / MotoPlay OTA rollout notes.
+Report a working bike that isn’t listed in **[Discord](https://discord.gg/xRt5yZy2U)**.
 
 ---
 
@@ -174,8 +165,9 @@ You only do this once.
    hotspot (e.g. *CFMOTO4288*) — tap **Connect / Allow**.
 3. The dash connects and **Android Auto appears on the dashboard**. 🎉
 
-From then on, drive Android Auto **from the dash touchscreen** — tap, scroll, and pinch-to-zoom.
-Your phone can be locked or in your pocket; a persistent notification keeps the link alive.
+From then on, drive Android Auto from the **dash touchscreen**, or open **Dash view** / **Controls**
+on the phone. Your phone can be locked or in your pocket; a persistent notification keeps the link
+alive.
 
 **Next time**, just tap **Connect to `<your bike>`** — or leave **Auto-connect** on and it links up on
 launch whenever the bike's Wi‑Fi is in range.
@@ -221,17 +213,19 @@ and a freshly scanned bike inherits them until you customize it.)
 
 <br clear="all"/>
 
-### 📐 Resolution & orientation
+### 📐 Resolution, orientation & screen margins
 
 Android Auto only supports a fixed set of resolutions, and dashes come in different shapes. In
 **Setup ▸ Resolution & orientation**:
 
 - **Auto** fits recognized dashes automatically. For an **unrecognized** dash, the app reads the
-  screen geometry the dash reports on connect and **remembers it** — so on the next connect it picks
-  the right **orientation (landscape/portrait)** by itself. (You may see a one-time letterboxed
-  frame the very first time; reconnect once and it self-corrects.)
+  panel size the dash reports, **remembers it**, and on the next connect picks a better AA resolution
+  (learned geometry). You may see a one-time letterboxed frame the first time — reconnect once.
 - Manual overrides: **Landscape 800×480 / 1280×720 (HD)** and **Portrait 720×1280 / 1080×1920 (HD)**.
-- **Screen fit** — *Fill* (crop), *Fit* (letterbox), or *Stretch* (fill with slight distortion).
+- **Screen fit** — *Fill* (crop), *Fit* (letterbox), or *Stretch*.
+- **Screen margins** (Setup → dedicated page) — inset Android Auto from **top / bottom / left / right**
+  independently (dash pixels). Useful on **800NK Advanced** so the MotoPlay pull-down doesn’t steal
+  swipes. Reset returns to the active profile’s defaults.
 
 > HD is sharper but heavier and can black-screen on some dashes — drop to a smaller size or Auto if
 > that happens.
@@ -292,11 +286,13 @@ backpack while riding.
 
 ### 🎛️ Handlebar & on-screen controls
 
-**Touchscreen dashes** (800MT) are driven by touch. The **1000 MT‑X** and **non-touch** CFDL16-class
-bikes (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C) are driven by the **handlebar buttons**
-and an **on-screen pad** — Android Auto stays in focus/knob mode so those controls can move a cursor.
-(On the 1000 MT‑X you can still unlock the bike's own touch lock for native menus; mirrored AA is
-handlebar-first so buttons keep working.) Open **Controls & handlebar buttons** from the main screen.
+**Touchscreen dashes** (800MT, 800NK Advanced, …) are driven by touch. The **1000 MT‑X** and
+**non-touch** CFDL16-class bikes (450SR, 675SR, 300SR, 450NK, 675NK, 450MT, 450CL‑C, …) are driven by
+the **handlebar buttons** and an **on-screen pad** — Android Auto stays in focus/knob mode so those
+controls can move a cursor. (On the 1000 MT‑X you can still unlock the bike's own touch lock for
+native menus; mirrored AA is handlebar-first so buttons keep working.)
+
+On the home screen, tap the big **Controls** button (next to **Dash view**).
 
 <p>
 <img src="docs/screenshots/10_controls.png" width="220" alt="Controls — on-screen pad + handlebar toggle"/>&nbsp;
@@ -314,10 +310,10 @@ the mirroring link — so you must **pair the phone to the bike over Bluetooth**
 | **Backward** — ◀ left, or ▲ volume on non-touch dashes | Rotary knob back (previous item) |
 | **Forward** — ▶ right, or ▼ volume on non-touch dashes | Rotary knob forward (next item) |
 | **Select** — Enter / ★ (start) button, quick tap | Select / OK |
-| **Select (hold)** — press and hold Enter / ★ | Assistant (voice) |
-| **Backward ×2** (double-tap Backward) | Home (app list) |
-| **Forward ×2** (double-tap Forward) | Back |
-| **Select ×2** (double-tap Enter / ★) | Assistant (voice) |
+| **Select (hold)** — press and hold Enter / ★ | Home (app list) |
+| **Backward ×2** (double-tap Backward) | D-pad left |
+| **Forward ×2** (double-tap Forward) | D-pad right |
+| **Select ×2** (double-tap Enter / ★) | Back |
 
 The mapping is by **meaning, not by physical button**: the app auto-routes whatever your bike
 sends — the 450SR's ▲/▼ volume, or the 800MT's ◀/▶ track keys — into the same Backward / Forward /
@@ -340,12 +336,11 @@ helmet mic — OpenCfMoto streams the mic to Android Auto (grant the microphone 
 
 ### 📺 Dash view (watch & control from the phone)
 
-Tap **View & control dash** on the main screen to see the **live dashboard inside the app**. It mirrors
-exactly what's on the bike, so you can set up navigation or pick music on the phone before you ride —
-then pocket it. On touch dashes you can **drive it directly with your fingers** (pinch-to-zoom
-included); a bottom bar (knob, D-pad, OK, Back, Home, voice) works on every dash. Hit **⛶** for a clean
-fullscreen view (hides the app and phone bars); **Back** exits fullscreen. The **🌗** button cycles the
-map's [dark mode](#-map-dark-mode) live.
+Tap **Dash view** on the home screen (next to **Controls**) to see the **live dashboard inside the
+app**. It mirrors exactly what's on the bike, so you can set up navigation or pick music on the phone
+before you ride — then pocket it. On touch dashes you can **drive it with your fingers**
+(pinch-to-zoom included); a bottom bar (knob, D-pad, OK, Back, Home, voice) works on every dash. Hit
+**⛶** for fullscreen; **Back** exits. The **🌗** button cycles [map dark mode](#-map-dark-mode) live.
 
 <p>
 <img src="docs/screenshots/13_dash_view.png" width="240" alt="In-app Dash view — live Android Auto with on-screen controls"/>
@@ -353,13 +348,17 @@ map's [dark mode](#-map-dark-mode) live.
 
 <br clear="all"/>
 
-### 🧰 Diagnostics
+### 🧰 Diagnostics, updates & About
 
 <img src="docs/screenshots/06_logs.png" width="240" align="right" alt="Diagnostics log"/>
 
-Tap **Logs** to expand a live diagnostics panel. It narrates every step of the connection and is the
-best way to understand what's happening. Use **Share** to export the log if you need help, or
-**Clear** to reset it.
+- **Logs** — live connection narrative. **Share** exports the log (**Wi‑Fi passwords / serials are
+  redacted by default**; Setup → *Include secrets in shared logs* only if you need them locally).
+- **Setup → Report a problem** — short form + diagnostics + redacted log in one shareable file.
+- **Setup → Check for update** — looks at GitHub Releases; the app also nags at most once a day when
+  a newer build exists (optional Download / Skip / Later). Bike Wi‑Fi has no internet, so checks run
+  on cellular/home Wi‑Fi.
+- **About** (home header or Setup) — copyright, credits, **Discord**, and **Donate** (Ko‑fi).
 
 <br clear="all"/>
 
@@ -370,14 +369,16 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | Button | What it does |
 | --- | --- |
 | **Connect to `<bike>`** | One-tap reconnect to your last paired bike and project Android Auto. |
-| **Scan bike** | Scan a bike's pairing QR to pair/connect (adds it to Devices). |
+| **Scan bike** | Scan a bike's pairing QR to pair/connect (adds it to the Garage). |
 | **Mirror** | Mirror your **whole phone screen** to the dash instead of Android Auto. |
-| **Stop** | Stop everything and disconnect from the bike Wi‑Fi. |
-| **Setup** | Permissions, Android Auto setup, display/battery, map theme, startup & recovery, Bluetooth. |
-| **Garage** | Manage your bikes — select, rename, add a photo, add/remove (each keeps its own settings). |
+| **Stop** | Stop everything and leave bike Wi‑Fi / P2P. |
+| **Dash view** | Live in-app mirror of the dash — touch + on-screen controls. |
+| **Controls** | On-screen D-pad/knob, volume, handlebar mapping, Navigate-to. |
+| **Setup** | Permissions, AA setup, display/margins, Wi‑Fi transport, profiles, updates, About. |
+| **Garage** | Manage bikes — select, rename, photo, add/remove (per-bike settings). |
 | **Trip** | GPS trip computer + saved rides and route maps. |
-| **Controls & handlebar buttons** | On-screen D-pad/knob, "Navigate to…", and handlebar-button setup + remapping. |
-| **Logs** | Show/hide the live diagnostics panel (with Share / Clear). |
+| **Logs** | Show/hide diagnostics (Share / Clear). |
+| **About** | Copyright, credits, Discord, Donate. |
 
 ---
 
@@ -393,7 +394,8 @@ best way to understand what's happening. Use **Share** to export the log if you 
 
 | Symptom | Try this |
 | --- | --- |
-| App **won't connect** / keeps retrying, or the dash shows **"device is not on the network"** | This is usually the **dash's Wi‑Fi hotspot** stuck in a bad state. On the dash's phone-connection screen, **toggle between the Android and iOS (CarPlay) QR codes** — this restarts the HUD's Wi‑Fi network — then tap **Connect** again. |
+| App **won't connect** / keeps retrying, or the dash shows **"device is not on the network"** | Usually the **dash Wi‑Fi** is stuck. On the phone-connection screen, **toggle Android ↔ iOS (CarPlay) QR** to restart the hotspot, then **Connect** again. After an ignition cycle the app **re-requests Wi‑Fi** automatically; some firmwares still need the pairing/QR screen once. |
+| **CL‑C450 / DIRECT‑…** never joins | In Setup set Wi‑Fi to **P2P** (or Auto). These dashes are often Wi‑Fi Direct Group Owners, not a normal AP. |
 | Dash stays **blank** and the app says to **close the official CFMoto app** | The official CFMoto / EasyConnect app grabs the same link ports, so the bike connects to *it* instead. The app pops a prompt with **Close & retry** (best-effort) and **App settings** (tap *Force stop*); do that and reconnect. |
 | App reports **VPN** blocking bike Wi‑Fi | Always-on VPN with “Block connections without VPN” returns EPERM when pinning sockets to the bike AP. Turn the VPN off for the ride, disable that kill-switch, or allow LAN / local network in the VPN app — then Connect again. |
 | Dash stays **black** after connecting | Tap **Stop**, then **Connect** / **Scan bike** again. Make sure the dash is on its phone-connection screen. |
@@ -404,9 +406,8 @@ best way to understand what's happening. Use **Share** to export the log if you 
 | Dash **froze** and didn't recover | With *Auto-recovery* on it should reconnect itself; otherwise tap **Stop** then **Connect**. |
 | **Didn't resume on its own** after a long stop | Enable **Seamless resume** (Setup ▸ Startup & recovery → *Display over other apps*) so the app can re-project with the screen off; otherwise tap the **“Bike reconnected”** notification. |
 
-**Getting help:** reproduce the issue, then tap **Logs ▸ Share** and send the log file — it describes
-each step and makes problems diagnosable. Drop it in the
-**[Discord](https://discord.gg/xRt5yZy2U)** and we'll help you out.
+**Getting help:** reproduce the issue, then **Logs ▸ Share** or **Setup → Report a problem**, and drop
+the file in **[Discord](https://discord.gg/xRt5yZy2U)**.
 
 ---
 
@@ -461,18 +462,20 @@ and built the Android Auto plumbing before us. Huge thanks to:
 
 - **[dcoletto/open-cfmoto](https://github.com/dcoletto/open-cfmoto)** — the original CFMoto EasyConnect
   mirroring app this is based on.
-- **[richardbizik/open-cfmoto](https://github.com/richardbizik/open-cfmoto)** — for the 1000 MT‑X
-  support and profile work.
-- **[BojanJ/open-cfmoto](https://github.com/BojanJ/open-cfmoto)** — for the more complete Android Auto
-  integration we built on top of.
-- **[ionutradu252/open-cfmoto](https://github.com/ionutradu252/open-cfmoto)** — for the CFDL16 / 450SR
-  work this project's handlebar-button control, on-screen D-pad/knob, navigate-to, and Assistant mic
-  were ported from.
+- **[richardbizik/open-cfmoto](https://github.com/richardbizik/open-cfmoto)** — 1000 MT‑X support and
+  profile work.
+- **[BojanJ/open-cfmoto](https://github.com/BojanJ/open-cfmoto)** — fuller Android Auto integration.
+- **[ionutradu252/open-cflink](https://github.com/ionutradu252/open-cflink)** — handlebar controls,
+  on-screen pad, navigate-to, Assistant mic, screen margins, log redaction, update checker, ghost-touch
+  / stitch, reconnect polish, and 800NK Advanced geometry.
+- **[eugen0309/open-cfmoto](https://github.com/eugen0309/open-cfmoto)** — Wi‑Fi Direct (`BikeWifiP2p`)
+  and CL‑C450 path.
 - **[headunit-revived](https://github.com/andreknieriem/headunit-revived)** by *andreknieriem* — the
   Android Auto (AAP) receiver foundation.
 
-Thank you to everyone in the CFMoto/EasyConnect community who shared logs, captures, and findings that
-made this possible. See the [`docs/`](docs/) folder for the technical/architecture write-ups.
+Maintained by **Alexandru** ([alexandru.rocks](https://alexandru.rocks)) — see **About** in the app.
+Thank you to everyone who shared logs, captures, and bike reports. Technical notes live in
+[`docs/`](docs/).
 
 ---
 

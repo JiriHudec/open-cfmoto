@@ -13,16 +13,20 @@ enum class ProfileOverride(val id: String, val shortLabel: String, val detail: S
     AUTO("auto", "Auto", "Detect from the bike (recommended)"),
     LEGACY("legacy", "Legacy", "CFDL16 / 450SR-style non-touch"),
     NK800("nk800", "800NK", "CRCP / sdk 0.9.23.x non-touch"),
+    NK_ADV("nk_adv", "800NK Adv", "CFDL26 touch 720×712"),
     CFDL26_LAND("cfdl26_land", "800MT", "CFDL26 landscape touch"),
     CFDL26_PORT("cfdl26_port", "1000 MT-X", "CFDL26 portrait (handlebar-primary)"),
+    CLC450("clc450", "CL‑C450", "544×512 near-square"),
     ;
 
     fun resolve(): BikeProfile? = when (this) {
         AUTO -> null
         LEGACY -> LegacyCfdl16Profile
         NK800 -> Nk800Profile
+        NK_ADV -> Cfdl26NkTouchProfile
         CFDL26_LAND -> Cfdl26LandscapeProfile
         CFDL26_PORT -> Cfdl26PortraitProfile
+        CLC450 -> ClC450Profile
     }
 
     companion object {

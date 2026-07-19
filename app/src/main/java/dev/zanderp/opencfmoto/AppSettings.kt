@@ -21,6 +21,8 @@ object AppSettings {
     private const val KEY_AUTO_RECOVERY = "auto_recovery"
     private const val KEY_LOG_TRIPS = "log_trips"
     private const val KEY_FORCE_NON_TOUCH = "force_non_touch"
+    private const val KEY_INCLUDE_SECRETS = "include_secrets_in_logs"
+    private const val KEY_TRANSPORT = "wifi_transport"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -43,10 +45,37 @@ object AppSettings {
         BikeProfileHolder.forceNonTouch = on
     }
 
+    /** When true, Share Logs / LogBus keep Wi‑Fi passwords and serials. Default off. */
+    fun includeSecretsInLogs(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_INCLUDE_SECRETS, false)
+    fun setIncludeSecretsInLogs(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_INCLUDE_SECRETS, on).apply()
+        LogBus.includeSecrets = on
+    }
+
+    fun transport(ctx: Context): WifiTransport =
+        WifiTransport.byId(prefs(ctx).getString(KEY_TRANSPORT, null))
+    fun setTransport(ctx: Context, t: WifiTransport) =
+        prefs(ctx).edit().putString(KEY_TRANSPORT, t.id).apply()
+
     /** Sync holder flags from prefs (call on process start / before connect). */
     fun applyToHolder(ctx: Context) {
         BikeProfileHolder.forceNonTouch = forceNonTouch(ctx)
+        LogBus.includeSecrets = includeSecretsInLogs(ctx)
         ProfilePrefs.applyToHolder(ctx)
         ButtonMap.ensureDefaultsMigrated(ctx)
+        ScreenMargins.load(ctx)
+    }
+}
+
+/** How to join the bike Wi‑Fi. [AUTO] prefers AP when the QR advertises it, else P2P. */
+enum class WifiTransport(val id: String, val label: String) {
+    AUTO("auto", "Auto (from QR)"),
+    AP("ap", "Force Wi‑Fi AP"),
+    P2P("p2p", "Force Wi‑Fi Direct"),
+    ;
+
+    companion object {
+        fun byId(id: String?): WifiTransport =
+            entries.firstOrNull { it.id == id } ?: AUTO
     }
 }

@@ -47,6 +47,26 @@ class EasyConnProber(
         private const val MAX_RECONNECT_ATTEMPTS = 10
         /** Proactive PXC heartbeat interval on each :10922 channel socket (CAR_CTRL + CAR_DATA). */
         private const val PXC_HEARTBEAT_INTERVAL_MS = 2000L
+
+        // Ghost-touch filtering for the 800NK digitizer — one finger can appear as two contacts
+        // during a press or drag. Without filtering, AA reads the extras as stray taps / pinch.
+        /** A contact within this many px of another pointer is the same finger ghosting. */
+        private const val GHOST_MERGE_PX = 48
+        /** A finger whose UP frame was lost is dropped after this long with no update. */
+        private const val POINTER_STALE_MS = 300L
+        /** AA only needs two fingers (pinch); extra contacts are noise. */
+        private const val MAX_POINTERS = 2
+
+        // Contact re-acquisition — the digitizer drops a finger mid-drag and picks it back up
+        // within ~0–14 ms and under 150 px. Committing that UP ends the gesture as a string of taps.
+        /** Hold an UP this long to see if the same finger comes back. */
+        private const val STITCH_MS = 80L
+        /** Re-acquired contact must land near where it left. */
+        private const val STITCH_PX = 150
+
+        /** Two contacts this close are the same finger reported twice (real pinch fingers sit further apart). */
+        internal fun near(ax: Int, ay: Int, bx: Int, by: Int, tol: Int = GHOST_MERGE_PX): Boolean =
+            kotlin.math.abs(ax - bx) <= tol && kotlin.math.abs(ay - by) <= tol
     }
 
     private val handshake = PxcHandshake(log).also {
@@ -70,6 +90,22 @@ class EasyConnProber(
     @Volatile private var touchMoves = 0
     @Volatile private var lastFrameAt = 0L
 
+    /** Live dash contacts: id → (x, y, lastSeenMs). Stale entries are evicted when UP is lost. */
+    private val pointers = LinkedHashMap<Int, Triple<Int, Int, Long>>()
+    private var ghostsDropped = 0
+    private var stitches = 0
+
+    /** An UP held back briefly (see [STITCH_MS]) and the timer that commits it. */
+    private var pendingUpId = -1
+    private var pendingUpX = 0
+    private var pendingUpY = 0
+    private var pendingUpAt = 0L
+    private var pendingUpTask: java.util.concurrent.ScheduledFuture<*>? = null
+    private var stitchExec: java.util.concurrent.ScheduledExecutorService? = null
+
+    /** Dash pointer id → the id AA already knows, when a dropped contact came back as a new id. */
+    private val aaIdOf = HashMap<Int, Int>()
+
     // Live client sockets the bike has opened back to us, so the watchdog ([AndroidAutoService]) can
     // force a clean reconnect by dropping them (which trips the existing onAllConnectionsClosed path).
     private val activeClients = java.util.Collections.synchronizedList(ArrayList<Socket>())
@@ -85,7 +121,16 @@ class EasyConnProber(
     @Volatile private var reprobing = false
     @Volatile private var reconnectAttempts = 0
 
-    fun start(network: Network?) {
+    /**
+     * @param gatewayOverride when set (Wi‑Fi Direct P2P path), use this bike GO IP instead of
+     *   resolving from [Network] link properties — P2P often has no default route.
+     * @param bindIpOverride phone's P2P interface address when there is no [Network] to bind.
+     */
+    fun start(
+        network: Network?,
+        gatewayOverride: java.net.Inet4Address? = null,
+        bindIpOverride: java.net.Inet4Address? = null,
+    ) {
         if (running) { log("already running"); return }
         probed = false
         framesSent = 0
@@ -96,10 +141,17 @@ class EasyConnProber(
         this.network = network
         dumpEnvironment(network)
 
-        val myIp = pickBikeInterfaceIp(network)
+        val myIp = bindIpOverride ?: pickBikeInterfaceIp(network)
         if (myIp == null) { log("could not resolve our IPv4 on the bike network; aborting"); return }
-        val bikeIp = resolveGateway(network)
-        if (bikeIp == null) { log("could not resolve bike gateway IP; aborting"); return }
+        val bikeIp = gatewayOverride ?: resolveGateway(network)
+        if (bikeIp == null) {
+            log(
+                "could not resolve bike gateway IP; aborting" +
+                    (if (network != null) " — if Wi‑Fi is up, open MotoPlay / show the pairing QR on the dash"
+                    else ""),
+            )
+            return
+        }
         this.myIp = myIp
         this.bikeIp = bikeIp
         log("our IP=${myIp.hostAddress}  bike IP=${bikeIp.hostAddress}")
@@ -160,6 +212,9 @@ class EasyConnProber(
             sendMdnsRespond(bikeIp, myIp, network)
         }
         startHeartbeatLog()
+        stitchExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "ec-touch-stitch").apply { isDaemon = true }
+        }
     }
 
     fun stop() {
@@ -172,6 +227,8 @@ class EasyConnProber(
         if (ownsVideo) video?.stop()
         video = null; ownsVideo = false
         heartbeatThread?.interrupt(); heartbeatThread = null
+        synchronized(pointers) { cancelPendingUp(); pointers.clear(); aaIdOf.clear() }
+        stitchExec?.shutdownNow(); stitchExec = null
         synchronized(ctrlHeartbeatThreads) {
             for (t in ctrlHeartbeatThreads) t.interrupt()
             ctrlHeartbeatThreads.clear()
@@ -556,13 +613,10 @@ class EasyConnProber(
     /**
      * Dash touchscreen event (PXC media cmdType 32, 18-byte body, little-endian):
      *   action u16 @0 (2=DOWN, 3=MOVE, 1=UP) | x u16 @2 | y u16 @4 | pointerId u16 @6 | timestamp u32 @8 | …
-     * Coordinates are in the bike canvas we negotiated ([negW]x[negH]). The CFDL26 dash reports
-     * genuine two-finger multi-touch: the byte at offset 6 is the finger index (0/1). NOTE: Y is a
-     * 16-bit field — reading it as u32 (the old bug) folded the pointerId into the high bits, so the
-     * second finger got a bogus Y (~65 800), landed outside the canvas, and was silently dropped.
-     * Forward both pointers to the Android Auto session via [AaVideoBridge.touchSink], which
-     * letterbox-maps them into AA video space and sends them over the AAP INPUT channel as
-     * multi-touch (enabling pinch-to-zoom). Actions are normalised to AaInput's 0=DOWN/1=UP/2=MOVE.
+     * Coordinates are in the bike canvas we negotiated ([negW]x[negH]). Y is u16 at @4; pointerId is
+     * u16 at @6. Ghost contacts and mid-drag UP drops are filtered before forwarding the active pointer
+     * via [AaVideoBridge.touchSink] (AaInput tracks the full multi-touch set). Actions normalised to
+     * AaInput's 0=DOWN/1=UP/2=MOVE.
      */
     private fun handleTouch(tag: String, body: ByteArray) {
         if (body.size < 8) { log("[$tag] touch frame too short (${body.size}b)"); return }
@@ -577,16 +631,113 @@ class EasyConnProber(
             3 -> 2   // MOVE
             else -> { log("[$tag] touch: unknown action=$rawAction x=$x y=$y"); return }
         }
-        // Log DOWN/UP (and the first MOVE) so the coordinate mapping is verifiable without move spam.
-        if (action != 2 || (touchMoves++ % 30) == 0) {
-            log("[$tag] TOUCH ${if (action==0) "DOWN" else if (action==1) "UP" else "MOVE"} bike=($x,$y) p$pointerId canvas=${negW}x$negH")
+
+        synchronized(pointers) {
+            val now = android.os.SystemClock.elapsedRealtime()
+
+            // Drop fingers whose UP frame was lost so a missed UP can't strand one down forever.
+            pointers.entries.removeAll { (id, p) -> id != pointerId && now - p.third > POINTER_STALE_MS }
+
+            when (action) {
+                1 -> {
+                    if (!pointers.containsKey(pointerId)) return   // UP for a filtered ghost
+                    holdUp(tag, pointerId, x, y, now)
+                    return
+                }
+                0 -> {
+                    // Did the finger we are holding an UP for just come back? Continue as MOVE.
+                    if (pendingUpId >= 0 && now - pendingUpAt <= STITCH_MS &&
+                        near(pendingUpX, pendingUpY, x, y, STITCH_PX)
+                    ) {
+                        val originalId = aaIdFor(pendingUpId)
+                        cancelPendingUp()
+                        if (pointerId != originalId) aaIdOf[pointerId] = originalId
+                        if (stitches++ % 10 == 0) {
+                            log("[$tag] touch: contact came back ${now - pendingUpAt}ms later, " +
+                                "keeping the drag alive instead of ending it (#$stitches)")
+                        }
+                        emit(tag, 2, pointerId, x, y, now)
+                        return
+                    }
+                    commitPendingUp(tag)
+                    if (isGhost(pointerId, x, y)) {
+                        if ((ghostsDropped++ % 20) == 0) {
+                            log("[$tag] touch: ignoring ghost contact at ($x,$y) near an existing finger")
+                        }
+                        return
+                    }
+                }
+                else -> if (isGhost(pointerId, x, y)) return
+            }
+
+            emit(tag, action, pointerId, x, y, now)
         }
+    }
+
+    /** A contact sitting on top of a different finger is one finger reported twice. */
+    private fun isGhost(pointerId: Int, x: Int, y: Int): Boolean =
+        pointers.any { (id, p) -> id != pointerId && near(p.first, p.second, x, y) }
+
+    private fun aaIdFor(dashId: Int): Int = aaIdOf[dashId] ?: dashId
+
+    /** Forward one event for the active pointer. Caller holds the [pointers] lock. */
+    private fun emit(tag: String, action: Int, dashId: Int, x: Int, y: Int, now: Long) {
+        pointers[dashId] = Triple(x, y, now)
+
+        if (pointers.size > MAX_POINTERS) {
+            val keep = (listOf(dashId) +
+                pointers.entries.sortedByDescending { it.value.third }.map { it.key })
+                .distinct().take(MAX_POINTERS).toSet()
+            pointers.keys.retainAll(keep)
+        }
+
+        val aaId = aaIdFor(dashId)
+
+        if (action != 2 || (touchMoves++ % 30) == 0) {
+            log("[$tag] TOUCH ${if (action==0) "DOWN" else if (action==1) "UP" else "MOVE"} " +
+                "bike=($x,$y) ptr=$dashId of ${pointers.size} canvas=${negW}x$negH")
+        }
+
         val sink = AaVideoBridge.touchSink
         if (sink == null) {
-            if (action != 2) log("[$tag] touch dropped — no AA session")
+            if (action != 2) log("[$tag] touch dropped, no AA session")
         } else {
-            sink(action, pointerId, x, y)
+            sink(action, aaId, x, y)
         }
+        if (action == 1) { pointers.remove(dashId); aaIdOf.remove(dashId) }
+    }
+
+    /** Hold an UP for [STITCH_MS] in case the digitizer re-acquires the same finger. */
+    private fun holdUp(tag: String, dashId: Int, x: Int, y: Int, now: Long) {
+        cancelPendingUp()
+        pendingUpId = dashId; pendingUpX = x; pendingUpY = y; pendingUpAt = now
+        pendingUpTask = try {
+            stitchExec?.schedule({
+                synchronized(pointers) {
+                    if (pendingUpId == dashId) {
+                        pendingUpId = -1
+                        emit(tag, 1, dashId, x, y, android.os.SystemClock.elapsedRealtime())
+                    }
+                }
+            }, STITCH_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: Exception) {
+            emit(tag, 1, dashId, x, y, now); pendingUpId = -1; null
+        }
+    }
+
+    /** Commit a held UP immediately. Caller holds the [pointers] lock. */
+    private fun commitPendingUp(tag: String) {
+        val id = pendingUpId
+        if (id < 0) return
+        val x = pendingUpX; val y = pendingUpY
+        cancelPendingUp()
+        emit(tag, 1, id, x, y, android.os.SystemClock.elapsedRealtime())
+    }
+
+    private fun cancelPendingUp() {
+        pendingUpTask?.cancel(false)
+        pendingUpTask = null
+        pendingUpId = -1
     }
 
     private fun resolveGateway(network: Network?): Inet4Address? {

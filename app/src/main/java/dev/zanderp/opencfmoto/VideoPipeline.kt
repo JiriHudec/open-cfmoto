@@ -377,6 +377,9 @@ class VideoPipeline(
     /** Compositor mode: detach the phone preview (blocks until the GL surface is destroyed). */
     fun clearPreviewSurface() = aaCompositor?.clearPreview()
 
+    /** Live update when the rider changes [ScreenMargins] while projecting. */
+    fun refreshScreenMargins() = aaCompositor?.refreshMargins()
+
     /** Called by the data socket on each REQ_RV_DATA_NEXT(114). Returns one access unit. */
     fun pollFrame(timeoutMs: Long): ByteArray? =
         try { frameQueue.pollFirst(timeoutMs, TimeUnit.MILLISECONDS) } catch (e: InterruptedException) { null }

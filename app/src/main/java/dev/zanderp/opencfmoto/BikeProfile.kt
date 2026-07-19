@@ -81,6 +81,18 @@ interface BikeProfile {
 
     /** Media-plane GET_VERSION reply (version, subVersion). */
     fun versionReply(): Pair<Int, Int> = 3 to 1
+
+    /**
+     * Optional measured panel (w,h) for letterbox / AA margin math. Null = unknown.
+     * Used with [DashMemory] / learned geometry on the next connect.
+     */
+    val panelSize: Pair<Int, Int>? get() = null
+
+    /**
+     * Default screen insets [top, bottom, left, right] in dash pixels until the rider customises
+     * [ScreenMargins]. 800NK Advanced blanks the MotoPlay pull-down with a top inset.
+     */
+    val defaultMargins: IntArray get() = intArrayOf(0, 0, 0, 0)
 }
 
 /** Registry + selection. Never returns null — falls back to the legacy (BIKE A) profile. */
@@ -95,8 +107,15 @@ object BikeProfiles {
     // sized the Android Auto video for a tall screen it doesn't have, which the dash rejected → a ~7s
     // connect/drop flap. A genuine portrait unit (1000 MT-X) still wins outright because it scores far
     // higher (CFDL26 version_name + its package), so order only decides ties.
-    private val all: List<BikeProfile> =
-        listOf(Nk800Profile, Cfdl26LandscapeProfile, Cfdl26PortraitProfile, LegacyCfdl16Profile)
+    private val all: List<BikeProfile> = listOf(
+        Nk800Profile,
+        Cfdl26NkTouchProfile,
+        Cfdl16MotoPlayLandscapeProfile,
+        ClC450Profile,
+        Cfdl26LandscapeProfile,
+        Cfdl26PortraitProfile,
+        LegacyCfdl16Profile,
+    )
 
     /** Authoritative selection from CLIENT_INFO (during the PXC handshake). Ties resolve to the
      *  first profile in [all] (Nk800 / landscape-first) — see the note there. Honour Setup's
@@ -111,22 +130,35 @@ object BikeProfiles {
         return scored.filter { it.second > 0 }.maxByOrNull { it.second }?.first ?: legacy
     }
 
-    /** Early selection from the QR code data, before we connect. Falls back to legacy. */
-    fun selectByQr(qr: QrData?): BikeProfile {
+    /**
+     * Early selection from the QR code data, before we connect. Falls back to legacy.
+     * When [context] is set, a previously learned panel size can override the guess (2nd connect).
+     */
+    fun selectByQr(qr: QrData?, context: android.content.Context? = null): BikeProfile {
         BikeProfileHolder.profileOverride.resolve()?.let { return it }
+        val base = selectByQrGuess(qr)
+        if (context == null || qr == null) return base
+        val panel = DashMemory.get(context, qr.ssid) ?: return base
+        if (panel == base.panelSize) return base
+        val res = DashMemory.bestFit(panel.first, panel.second) ?: return base
+        LogBus.log(
+            "[panel] using measured ${panel.first}x${panel.second} → AA ${res.w}x${res.h} " +
+                "(was ${base.name})",
+        )
+        return LearnedGeometryProfile(base, panel, res)
+    }
+
+    private fun selectByQrGuess(qr: QrData?): BikeProfile {
         if (qr == null) return legacy
         val matches = all.filter { it.matchesModelId(qr.modelId ?: "") }
         if (matches.isEmpty()) return legacy
         if (matches.size == 1) return matches[0]
 
-        // If there are multiple matches (both Portrait and Landscape match modelId 37426):
-        // Portrait uses Wi-Fi Direct (supportsP2p = true, or ssid starts with DIRECT-)
+        // modelId 37426 is shared by 1000 MT-X (P2P/portrait), 800MT (AP/landscape), and
+        // 800NK Advanced (AP/near-square touch). P2P → portrait; AP → landscape 800MT as the
+        // safer default — CLIENT_INFO scoring / learned panel upgrades Advanced on reconnect.
         val isP2p = qr.supportsP2p || qr.ssid.startsWith("DIRECT-")
-        return if (isP2p) {
-            Cfdl26PortraitProfile
-        } else {
-            Cfdl26LandscapeProfile
-        }
+        return if (isP2p) Cfdl26PortraitProfile else Cfdl26LandscapeProfile
     }
 
     /** Legacy helper for backward compatibility / tests. */
@@ -357,6 +389,114 @@ object Cfdl26PortraitProfile : BikeProfile {
  * BIKE C — the CFDL26 / MotoPlay head unit on the 800MT (sdkVersion 1.1.2,
  * package com.cfmoto.easyconnect, enableSockServerAuth=true, AP mode).
  */
+/**
+ * CFDL26 800NK Advanced — near-square touch panel 720×712 (measured). Portrait AA 720×1280 with
+ * width matched 1:1; default top margin blanks MotoPlay's pull-down handle.
+ */
+object Cfdl26NkTouchProfile : BikeProfile {
+    override val name = "CFDL26 / 800NK Advanced (touch, 720×712)"
+    override val requiresSockServerAuth = true
+    override val supportsScreenTouch = true
+    override val advertisedSupportFunction = 128
+    override val panelSize = 720 to 712
+    override val aaVideo = AaVideoSpec(AaResolution.PORTRAIT_720x1280, dpi = 160)
+    override val defaultMargins = intArrayOf(22, 0, 0, 0)
+
+    override fun matchesModelId(modelId: String): Boolean = modelId.trim() == "37426"
+
+    override fun score(info: JSONObject): Int {
+        var s = 0
+        if (info.optString("version_name").startsWith("CFDL26")) s += 4
+        if (info.optString("package_name") == "com.cfmoto.easyconnect") s += 3
+        if (info.optBoolean("enableSockServerAuth", false)) s += 2
+        val sdk = info.optString("sdkVersion")
+        if (sdk.isNotEmpty() && !sdk.startsWith("0.")) s += 2
+        if (s > 0 && info.optInt("supportFunction", 0) == 128) s += 1
+        // Tie-breakers vs 800MT landscape (same package / CFDL26).
+        if (info.optString("version_name") == "CFDL26.2.3.0.5") s += 3
+        if (info.optString("HUID").startsWith("6KWV")) s += 2
+        if (info.optBoolean("supportMirrorOverlayTouch", false)) s += 1
+        if (info.optBoolean("supportScreenTouch", false)) s += 1
+        return s
+    }
+
+    override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
+        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction).apply {
+            if (BikeProfileHolder.advertisesScreenTouch) put("supportScreenTouch", true)
+        }
+
+    override fun handleUnknownControl(
+        tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
+    ): Boolean = Cfdl26PortraitProfile.handleUnknownControl(tag, frame, out, log)
+}
+
+/** CFDL16-class MotoPlay / 450SR-style on modelId 66660742 (Wi‑Fi Direct, non-touch, needs HB). */
+object Cfdl16MotoPlayLandscapeProfile : BikeProfile {
+    override val name = "CFDL16 / MotoPlay Landscape (modelId 66660742)"
+    override val requiresSockServerAuth = false
+    override val supportsScreenTouch = false
+    override val advertisedSupportFunction = 128
+    override val panelSize = 800 to 400
+    override val aaVideo = AaVideoSpec(AaResolution.LANDSCAPE_800x480, dpi = 160)
+
+    override fun matchesModelId(modelId: String): Boolean = modelId.trim() == "66660742"
+
+    override fun score(info: JSONObject): Int {
+        var s = 0
+        if (info.optString("channel") == "66660742") s += 10
+        if (info.optString("sdkVersion").startsWith("0.9")) s += 2
+        if (info.optBoolean("supportLandscapeAdaptive", false)) s += 1
+        if (!info.optBoolean("supportScreenTouch", false)) s += 1
+        return s
+    }
+
+    override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
+        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction)
+
+    override fun handleUnknownControl(
+        tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
+    ): Boolean = Cfdl26PortraitProfile.handleUnknownControl(tag, frame, out, log)
+}
+
+/** Near-square CL‑C450 panel 544×512 — needs AA 1280×720 containing viewport (eugen0309). */
+object ClC450Profile : BikeProfile {
+    override val name = "CL‑C450 (544×512)"
+    override val requiresSockServerAuth = false
+    override val supportsScreenTouch = false
+    override val advertisedSupportFunction = 0
+    override val panelSize = 544 to 512
+    override val aaVideo = AaVideoSpec(AaResolution.LANDSCAPE_1280x720, dpi = 160)
+
+    override fun matchesModelId(modelId: String): Boolean =
+        modelId.trim() in setOf("66660736", "CLC450")
+
+    override fun score(info: JSONObject): Int {
+        var s = 0
+        if (info.optString("channel") == "66660736") s += 8
+        if (info.optString("HUName").contains("48FB4C", ignoreCase = true)) s += 4
+        if (info.optString("sdkVersion").startsWith("0.9.23")) s += 1
+        return s
+    }
+
+    override fun buildClientInfoReply(info: JSONObject, huid: String?, phoneUuid: String): JSONObject =
+        basePhoneClientInfo(huid, phoneUuid, advertisedSupportFunction)
+
+    override fun handleUnknownControl(
+        tag: String, frame: PxcFrame, out: OutputStream, log: (String) -> Unit,
+    ): Boolean = Cfdl26PortraitProfile.handleUnknownControl(tag, frame, out, log)
+}
+
+/** Wraps a base profile with a measured panel + AA resolution for the next connect. */
+private class LearnedGeometryProfile(
+    private val base: BikeProfile,
+    panel: Pair<Int, Int>,
+    resolution: AaResolution,
+) : BikeProfile by base {
+    override val name = "${base.name} + measured ${panel.first}x${panel.second}"
+    override val aaVideo = AaVideoSpec(resolution, dpi = base.aaVideo.dpi)
+    override val panelSize = panel
+}
+
 object Cfdl26LandscapeProfile : BikeProfile {
     override val name = "CFDL26 / MotoPlay Landscape (800MT)"
     override val requiresSockServerAuth = true
@@ -379,6 +519,9 @@ object Cfdl26LandscapeProfile : BikeProfile {
         if (info.optBoolean("enableSockServerAuth", false)) s += 2
         if (info.optString("package_name") == "com.cfmoto.easyconnect") s += 3
         if (s > 0 && info.optInt("supportFunction", 0) == 128) s += 1
+        // Prefer landscape when the unit is clearly landscape / not the Advanced near-square path.
+        if (info.optBoolean("supportLandscapeAdaptive", false)) s += 2
+        if (!info.optBoolean("supportScreenTouch", false)) s -= 1
         return s
     }
 

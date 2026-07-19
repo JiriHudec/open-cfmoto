@@ -60,6 +60,13 @@ object BikeWifi {
     private const val REJOIN_FAST_MS = 300L
     private const val REJOIN_BASE_MS = 2500L
     private const val REJOIN_MAX_MS = 15000L
+    /**
+     * Must be passed to [ConnectivityManager.requestNetwork]. Without a timeout the request can
+     * wait forever after the bike AP dies — none of onAvailable/onLost/onUnavailable fire — so
+     * ignition-cycle reconnect stalls until the rider toggles something. open-cflink hit 7+ min
+     * hangs without this.
+     */
+    private const val JOIN_TIMEOUT_MS = 12_000
 
     fun join(
         context: Context,
@@ -107,6 +114,7 @@ object BikeWifi {
                 currentNetwork = network
                 cm.bindProcessToNetwork(network)
                 rejoinAttempts = 0
+                logLinkOnce(network)
                 if (!firstDelivered) {
                     firstDelivered = true
                     logCb?.invoke("Wi-Fi joined: $ssid (network=$network, bound)")
@@ -117,20 +125,48 @@ object BikeWifi {
                 }
             }
 
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                // Band/RSSI logged once per join from onAvailable path via logLinkOnce.
+            }
+
             override fun onLost(network: Network) {
                 logCb?.invoke("Wi-Fi lost: $network")
                 currentNetwork = null
+                linkLogged = false
                 onLostCb?.invoke()
                 if (active) scheduleRejoin()
             }
 
             override fun onUnavailable() {
-                logCb?.invoke("Wi-Fi join unavailable (bike off / out of range / declined)")
+                logCb?.invoke(
+                    "Wi-Fi join unavailable after ${JOIN_TIMEOUT_MS / 1000}s " +
+                        "(bike off, out of range, or declined) — will retry",
+                )
                 if (active) scheduleRejoin()
             }
         }
         callback = cb
-        cm.requestNetwork(req, cb)
+        // Timeout is mandatory — see JOIN_TIMEOUT_MS.
+        cm.requestNetwork(req, cb, JOIN_TIMEOUT_MS)
+    }
+
+    @Volatile private var linkLogged = false
+
+    private fun logLinkOnce(network: Network) {
+        if (linkLogged) return
+        val cm = this.cm ?: return
+        try {
+            val caps = cm.getNetworkCapabilities(network) ?: return
+            val info = caps.transportInfo as? android.net.wifi.WifiInfo ?: return
+            linkLogged = true
+            val mhz = info.frequency
+            val band = if (mhz in 2400..2500) "2.4GHz — SHARED WITH BLUETOOTH" else "${mhz / 1000}GHz"
+            logCb?.invoke(
+                "[wifi] link: ${mhz}MHz ($band), rssi=${info.rssi}dBm, " +
+                    "tx=${info.txLinkSpeedMbps}Mbps, rx=${info.rxLinkSpeedMbps}Mbps",
+            )
+        } catch (_: Exception) {
+        }
     }
 
     private fun scheduleRejoin() {
@@ -201,6 +237,7 @@ object BikeWifi {
         }
         callback = null
         firstDelivered = false
+        linkLogged = false
         cm.bindProcessToNetwork(null)
         currentNetwork = null
         log("Wi-Fi released")

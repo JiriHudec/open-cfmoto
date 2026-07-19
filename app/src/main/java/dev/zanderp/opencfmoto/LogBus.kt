@@ -18,14 +18,21 @@ object LogBus {
     /** Receives each already-timestamped line (MainActivity appends it to the TextView). */
     @Volatile var listener: ((String) -> Unit)? = null
 
+    /**
+     * When false (default), [LogRedactor] runs on every line before it hits the buffer / UI.
+     * Synced from [AppSettings.includeSecretsInLogs] — leave off for Share Logs.
+     */
+    @Volatile var includeSecrets: Boolean = false
+
     @Synchronized
     fun log(msg: String) {
-        val line = "${ts.format(Date())}  $msg"
+        val safe = if (includeSecrets) msg else LogRedactor.redact(msg)
+        val line = "${ts.format(Date())}  $safe"
         sb.append(line).append('\n')
         if (sb.length > 512 * 1024) sb.delete(0, sb.length - 256 * 1024)
         // Mirror to logcat so the full diagnostic stream is capturable over adb (`adb logcat -s
         // OpenCfMoto:*`) during on-hardware debugging, not just in the in-app log view.
-        Log.i(TAG, msg)
+        Log.i(TAG, safe)
         try { listener?.invoke(line) } catch (_: Exception) {}
     }
 

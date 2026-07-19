@@ -24,9 +24,9 @@ class BikeProfileSelectTest {
     @Test
     fun selectByModelIdPrefersNk800ForItsIds() {
         assertEquals(Nk800Profile, BikeProfiles.selectByModelId("66660703"))
-        // 37426 matches both CFDL26 landscape and portrait — firstOrNull in selectByModelId
-        // returns landscape (list order after Nk800).
-        assertEquals(Cfdl26LandscapeProfile, BikeProfiles.selectByModelId("37426"))
+        // 37426 is shared by NK Advanced touch, landscape 800MT, and portrait MT-X —
+        // selectByModelId returns the first registry hit (Cfdl26NkTouchProfile).
+        assertEquals(Cfdl26NkTouchProfile, BikeProfiles.selectByModelId("37426"))
     }
 
     @Test
