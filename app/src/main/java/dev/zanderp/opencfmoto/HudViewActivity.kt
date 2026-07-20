@@ -199,9 +199,10 @@ class HudViewActivity : AppCompatActivity() {
     private fun mapToSource(vx: Float, vy: Float): Pair<Int, Int>? {
         val vw = surface.width
         val vh = surface.height
-        val spec = BikeProfileHolder.aaVideo
-        val sw = spec.width
-        val sh = spec.height
+        // Usable (aspect-correct) content area — matches AaCompositor's preview fit and match-aspect
+        // crop. Touches map into the usable region, which is the content's coded coordinate space.
+        val sw = BikeProfileHolder.aaUsableWidth
+        val sh = BikeProfileHolder.aaUsableHeight
         if (vw == 0 || vh == 0 || sw == 0 || sh == 0) return null
 
         val srcAspect = sw.toFloat() / sh

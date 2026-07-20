@@ -457,6 +457,14 @@
                     android:textSize="12sp"
                     android:lineSpacingExtra="2dp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_custom_resolution"
+                    style="@style/Widget.OpenCfMoto.Segment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Custom resolution…" />
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

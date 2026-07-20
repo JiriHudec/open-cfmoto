@@ -99,6 +99,10 @@ class MainActivity : AppCompatActivity() {
         val autoGeo = if (userOverride == null) DashMemory.specFor(this, qr.ssid, BikeProfileHolder.active) else null
         BikeProfileHolder.aaVideoOverride = userOverride ?: autoGeo
         val spec = BikeProfileHolder.aaVideo
+        BikeProfileHolder.aaContentMargins = VideoPrefs.aaMarginsFor(this, spec)
+        val aspectNote = BikeProfileHolder.aaContentMargins.let {
+            if (it.any) " [match-aspect: margins ${it.marginW}x${it.marginH}]" else ""
+        }
         val note = when {
             userOverride != null -> " (override: ${VideoPrefs.resolution(this).label})"
             autoGeo != null -> " (auto-orientation from last connect)"
@@ -108,7 +112,7 @@ class MainActivity : AppCompatActivity() {
         val ov = BikeProfileHolder.profileOverride
         val ovNote = if (ov != ProfileOverride.AUTO) " [profile override: ${ov.shortLabel}]" else ""
         log("→ bike profile (QR ssid=${qr.ssid} modelId=${qr.modelId}): ${BikeProfileHolder.active.name} " +
-            "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi$note$touchNote$ovNote")
+            "→ AA ${spec.width}x${spec.height} @${spec.dpi}dpi$note$touchNote$ovNote$aspectNote")
     }
 
     /** Start the Android Auto → bike projection for [qr]. Shared by the one-tap Connect reconnect

@@ -199,9 +199,17 @@ class VideoPipeline(
         if (surf != null) {
             val fit = VideoPrefs.fit(context)
             val power = VideoPrefs.power(context)
+            // Match-panel-aspect: AA drew its UI into (coded - margins); sample only that sub-rect so
+            // the aspect-correct content — not the padded coded frame — is mapped onto the bike canvas.
+            val margins = BikeProfileHolder.aaContentMargins
+            val usableW = (src.width - margins.marginW).coerceIn(16, src.width)
+            val usableH = (src.height - margins.marginH).coerceIn(16, src.height)
             aaCompositor?.setFrameCap(power.fps)
-            aaCompositor?.setOutput(surf, w, h, src.width, src.height, fit)
-            log("[VIDEO] bike canvas ${w}x$h configured; AA source ${src.width}x${src.height} → fit=$fit power=${power.fps}fps")
+            aaCompositor?.setSourceCrop(usableW.toFloat() / src.width, usableH.toFloat() / src.height)
+            aaCompositor?.setOutput(surf, w, h, usableW, usableH, fit)
+            log("[VIDEO] bike canvas ${w}x$h configured; AA source ${src.width}x${src.height} " +
+                "usable ${usableW}x$usableH (margins ${margins.marginW}x${margins.marginH}) → " +
+                "fit=$fit power=${power.fps}fps")
         }
     }
 
