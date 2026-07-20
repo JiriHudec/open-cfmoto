@@ -99,6 +99,10 @@
             android:name=".ScreenMarginsActivity"
             android:exported="false" />
         <activity
+            android:name=".CustomResolutionActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".AboutActivity"
             android:exported="false" />
         <service

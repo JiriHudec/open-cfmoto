@@ -81,6 +81,13 @@ object VideoPrefs {
     private const val KEY_POWER = "power_mode"
     private const val KEY_RESOLUTION = "resolution_mode"
 
+    // Match panel aspect (AA margins): make Android Auto render at a target aspect ratio via the
+    // AAP marginWidth/marginHeight fields; the compositor then samples only the usable sub-rect.
+    // Default target is the 1000 MT-X panel (800x951).
+    private const val KEY_MATCH_ASPECT = "match_aspect_on"
+    private const val KEY_ASPECT_W = "match_aspect_w"
+    private const val KEY_ASPECT_H = "match_aspect_h"
+
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -123,6 +130,28 @@ object VideoPrefs {
 
     fun setResolution(ctx: Context, mode: ResolutionMode) {
         BikeScope.putString(prefs(ctx), ctx, KEY_RESOLUTION, mode.name)
+    }
+
+    fun matchAspect(ctx: Context): Boolean =
+        BikeScope.getBoolean(prefs(ctx), ctx, KEY_MATCH_ASPECT, false)
+
+    /** Target aspect for [matchAspect], as (width, height). Default = 1000 MT-X panel 800×951. */
+    fun aspectTarget(ctx: Context): Pair<Int, Int> = Pair(
+        BikeScope.getInt(prefs(ctx), ctx, KEY_ASPECT_W, 800),
+        BikeScope.getInt(prefs(ctx), ctx, KEY_ASPECT_H, 951),
+    )
+
+    fun setMatchAspect(ctx: Context, on: Boolean, w: Int, h: Int) {
+        BikeScope.putBoolean(prefs(ctx), ctx, KEY_MATCH_ASPECT, on)
+        BikeScope.putInt(prefs(ctx), ctx, KEY_ASPECT_W, w.coerceIn(16, 8192))
+        BikeScope.putInt(prefs(ctx), ctx, KEY_ASPECT_H, h.coerceIn(16, 8192))
+    }
+
+    /** Margins to advertise for the current AA [spec] under the match-aspect setting, or NONE. */
+    fun aaMarginsFor(ctx: Context, spec: AaVideoSpec): AaMargins {
+        if (!matchAspect(ctx)) return AaMargins.NONE
+        val (tw, th) = aspectTarget(ctx)
+        return AaMargins.forAspect(spec, tw, th)
     }
 
     /**

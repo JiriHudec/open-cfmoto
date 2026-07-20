@@ -62,8 +62,10 @@ class ServiceDiscoveryResponse
                             codecResolution = protoResolution(spec.resolution)
                             frameRate = Control.Service.MediaSinkService.VideoConfiguration.VideoFrameRateType._30
                             setDensity(spec.dpi)
-                            setMarginWidth(0)
-                            setMarginHeight(0)
+                            // Match-panel-aspect: advertise the unused margin so AA renders its UI at
+                            // the panel's aspect inside the fixed coded frame (see AaMargins).
+                            setMarginWidth(BikeProfileHolder.aaContentMargins.marginW)
+                            setMarginHeight(BikeProfileHolder.aaContentMargins.marginH)
                             setVideoCodecType(Media.MediaCodecType.MEDIA_CODEC_VIDEO_H264_BP)
                         }.build()
                     )
