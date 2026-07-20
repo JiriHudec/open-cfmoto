@@ -1,17 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/controls_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
-    android:fillViewport="true">
+    android:background="@color/bg">
+
+    <ScrollView
+        android:id="@+id/controls_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
     <LinearLayout
+        android:id="@+id/controls_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingHorizontal="16dp"
         android:paddingBottom="24dp">
+
+        <LinearLayout
+            android:id="@+id/controls_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
         <TextView
             android:layout_width="match_parent"
@@ -30,9 +42,11 @@
             android:text="Drive Android Auto without touching the dash: type a destination, use the on-screen pad, or map the bike's handlebar buttons."
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
+        </LinearLayout>
 
         <!-- ===== Navigate to… ===== -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_nav"
             style="@style/Card.OpenCfMoto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -82,6 +96,7 @@
 
         <!-- ===== Map theme ===== -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_theme"
             style="@style/Card.OpenCfMoto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -149,35 +164,59 @@
 
         <!-- ===== On-screen pad ===== -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_pad"
             style="@style/Card.OpenCfMoto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp">
 
             <LinearLayout
+                android:id="@+id/pad_body"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:orientation="vertical">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="On-screen pad"
-                    android:textColor="@color/text_secondary"
-                    android:textAllCaps="true"
-                    android:textSize="12sp"
-                    android:letterSpacing="0.08" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="On-screen pad"
+                        android:textColor="@color/text_secondary"
+                        android:textAllCaps="true"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.08" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_pad_fullscreen"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="Fullscreen"
+                        android:textColor="@color/brand_orange"
+                        android:textSize="13sp" />
+                </LinearLayout>
 
                 <TextView
+                    android:id="@+id/pad_intro"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="The rotary knob steps through lists; the arrows jump between areas. Works only while Android Auto is projecting."
+                    android:text="The rotary knob steps through lists; the arrows jump between areas. Works only while Android Auto is projecting. Use Fullscreen while riding — the phone stays awake."
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
 
                 <!-- Volume: needed when handlebar ▲/▼ are hijacked for AA nav -->
                 <TextView
+                    android:id="@+id/tv_volume_label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
@@ -196,6 +235,7 @@
                     android:textSize="12sp" />
 
                 <LinearLayout
+                    android:id="@+id/volume_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
@@ -230,6 +270,7 @@
 
                 <!-- knob back / up / knob fwd -->
                 <LinearLayout
+                    android:id="@+id/pad_row_knob"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
@@ -240,6 +281,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
                         android:layout_weight="1"
                         android:text="⟲ Prev" />
 
@@ -248,6 +290,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
                         android:layout_weight="1"
                         android:text="▲" />
 
@@ -256,15 +299,17 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
                         android:layout_weight="1"
                         android:text="Next ⟳" />
                 </LinearLayout>
 
                 <!-- left / OK / right -->
                 <LinearLayout
+                    android:id="@+id/pad_row_mid"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="8dp"
                     android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
@@ -272,6 +317,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
                         android:layout_weight="1"
                         android:text="◀" />
 
@@ -280,6 +326,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
                         android:layout_weight="1"
                         android:text="OK" />
 
@@ -288,15 +335,17 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
                         android:layout_weight="1"
                         android:text="▶" />
                 </LinearLayout>
 
                 <!-- down -->
                 <LinearLayout
+                    android:id="@+id/pad_row_down"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="8dp"
                     android:orientation="horizontal">
 
                     <Space
@@ -309,6 +358,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
                         android:layout_weight="1"
                         android:text="▼" />
 
@@ -320,9 +370,10 @@
 
                 <!-- back / home / assistant -->
                 <LinearLayout
+                    android:id="@+id/pad_row_nav"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="12dp"
                     android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
@@ -330,6 +381,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
                         android:layout_weight="1"
                         android:text="Back" />
 
@@ -338,6 +390,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="4dp"
                         android:layout_weight="1"
                         android:text="Home" />
 
@@ -346,6 +399,7 @@
                         style="@style/Widget.OpenCfMoto.Segment"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
                         android:layout_weight="1"
                         android:text="Voice" />
                 </LinearLayout>
@@ -354,6 +408,7 @@
 
         <!-- ===== Handlebar buttons ===== -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_handlebar"
             style="@style/Card.OpenCfMoto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -412,4 +467,5 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</FrameLayout>
