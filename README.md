@@ -63,6 +63,8 @@ dash touchscreen.
 | 🛟 **Auto-recovery & seamless resume** | Stalled/dropped dash reconnects; long stop parks AA and re-projects when the bike returns. |
 | 🔄 **In-app updates** | Optional nag when a newer GitHub Release is available (Download / Skip / Later). |
 | 🧰 **Diagnostics & problem report** | Live logs (secrets redacted by default), Share Logs, and Setup → **Report a problem**. |
+| 📤 **Share / import bike tuning** | Export profile, resolution, fit, margins & button map as JSON (no passwords / personal prefs) — share on Discord, Import on another phone. |
+| 📶 **Wi‑Fi-off alert** | If phone Wi‑Fi is off when connecting, a dialog offers **Wi‑Fi settings** (one tap). |
 | 📱 **Whole-screen mirroring** | Optional: mirror the entire phone instead of Android Auto. |
 
 ---
@@ -355,6 +357,10 @@ before you ride — then pocket it. On touch dashes you can **drive it with your
 - **Logs** — live connection narrative. **Share** exports the log (**Wi‑Fi passwords / serials are
   redacted by default**; Setup → *Include secrets in shared logs* only if you need them locally).
 - **Setup → Report a problem** — short form + diagnostics + redacted log in one shareable file.
+- **Setup → Share JSON / Import…** — export bike tuning (profile, resolution, fit, margins, buttons,
+  transport) — no Wi‑Fi passwords and no personal prefs (map theme, saved places, …). Import applies
+  onto your selected bike.
+- **Wi‑Fi off** — if you tap Connect with phone Wi‑Fi disabled, a dialog opens with a **Wi‑Fi settings** button.
 - **Setup → Check for update** — looks at GitHub Releases; the app also nags at most once a day when
   a newer build exists (optional Download / Skip / Later). Bike Wi‑Fi has no internet, so checks run
   on cellular/home Wi‑Fi.

@@ -114,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     /** Start the Android Auto → bike projection for [qr]. Shared by the one-tap Connect reconnect
      *  and a fresh scan, so both paths behave identically. */
     private fun startAaFlow(qr: QrData) {
+        if (!WifiGate.ensureEnabledOrPrompt(this)) return
         applyProfile(qr)
         val bikeName = BikeMemory.lastBikeName(this) ?: qr.ssid
         ConnectionState.set(Phase.STARTING_AA, bikeName)
@@ -378,6 +379,7 @@ class MainActivity : AppCompatActivity() {
         // the Connect button.
         refreshBikeLabel()
         renderStatus(ConnectionState.phase, ConnectionState.detail)
+        if (WifiGate.isWifiEnabled(this)) WifiGate.cancelNotification(this)
         // Retry auto-connect on resume: after finishing first-run setup, or once the bike's Wi-Fi
         // comes into range shortly after launch. Guarded so it only ever starts one attempt.
         if (SetupActivity.hasSeen(this)) maybeAutoConnect()
@@ -427,6 +429,12 @@ class MainActivity : AppCompatActivity() {
         }
         if (!SetupHelper.isAndroidAutoInstalled(this)) {
             logAutoConnectSkipOnce("Android Auto not installed")
+            return
+        }
+        if (!WifiGate.isWifiEnabled(this)) {
+            // Don't latch autoConnectStarted — retry once the rider turns Wi‑Fi back on.
+            WifiGate.ensureEnabledOrPrompt(this)
+            logAutoConnectSkipOnce("phone Wi‑Fi is off — turn it on to connect")
             return
         }
 
@@ -646,6 +654,7 @@ class MainActivity : AppCompatActivity() {
      * completes even if the activity is destroyed/recreated after it was armed.
      */
     private fun joinWifi(qr: QrData, gateOnAaSteady: Boolean) {
+        if (!WifiGate.ensureEnabledOrPrompt(this)) return
         ConnectionState.set(Phase.JOINING_WIFI)
         val transport = AppSettings.transport(this)
         val useP2p = when (transport) {
@@ -662,6 +671,7 @@ class MainActivity : AppCompatActivity() {
             ssid = qr.ssid,
             psk = qr.pwd,
             onAvailable = { network ->
+                WifiGate.cancelNotification(applicationContext)
                 if (gateOnAaSteady) {
                     LogBus.log("→ bike Wi-Fi bound (waiting for AA video to go steady)")
                     BikeLink.markWifiReady(network)
@@ -684,11 +694,13 @@ class MainActivity : AppCompatActivity() {
 
     /** Wi‑Fi Direct Group Owner path (CL‑C450 / some DIRECT- SSIDs). */
     private fun joinWifiP2p(qr: QrData, gateOnAaSteady: Boolean) {
+        if (!WifiGate.ensureEnabledOrPrompt(this)) return
         LogBus.log("→ joining via Wi‑Fi Direct (P2P)")
         BikeWifiP2p.connect(
             context = applicationContext,
             qr = qr,
             onConnected = { bindIp, gatewayIp ->
+                WifiGate.cancelNotification(applicationContext)
                 if (gateOnAaSteady) {
                     LogBus.log("→ P2P bound (waiting for AA video); bike=${gatewayIp.hostAddress}")
                     BikeLink.markP2pReady(bindIp, gatewayIp)
@@ -708,11 +720,13 @@ class MainActivity : AppCompatActivity() {
             },
             onFailed = { reason ->
                 LogBus.log("P2P join failed: $reason — falling back to AP join")
+                if (!WifiGate.ensureEnabledOrNotify(applicationContext)) return@connect
                 BikeWifi.join(
                     context = applicationContext,
                     ssid = qr.ssid,
                     psk = qr.pwd,
                     onAvailable = { network ->
+                        WifiGate.cancelNotification(applicationContext)
                         if (gateOnAaSteady) BikeLink.markWifiReady(network)
                         else {
                             ConnectionState.set(Phase.PXC_CONNECTING)

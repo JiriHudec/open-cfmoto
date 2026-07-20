@@ -10,12 +10,16 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import java.io.File
 
 /**
  * One-time guided setup + persistent settings. Shows a live checklist of the prerequisites for
@@ -41,6 +45,13 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var profileDesc: TextView
     private lateinit var btStatus: TextView
     private lateinit var resumeBtn: MaterialButton
+
+    private val importSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        importSettingsFromUri(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,12 +130,72 @@ class SetupActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.transport_p2p).setOnClickListener { setTransport(WifiTransport.P2P) }
         findViewById<MaterialButton>(R.id.secrets_on).setOnClickListener { setSecrets(true) }
         findViewById<MaterialButton>(R.id.secrets_off).setOnClickListener { setSecrets(false) }
+        findViewById<MaterialButton>(R.id.settings_share).setOnClickListener { shareSettingsJson() }
+        findViewById<MaterialButton>(R.id.settings_import).setOnClickListener {
+            importSettingsLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+        }
         findViewById<MaterialButton>(R.id.bt_settings_btn).setOnClickListener { BluetoothHelper.openBluetoothSettings(this) }
         resumeBtn.setOnClickListener { requestOverlayPermission() }
 
         findViewById<MaterialButton>(R.id.setup_done_btn).setOnClickListener {
             markSeen(this)
             finish()
+        }
+    }
+
+    /** Write the portable settings JSON and open the system share sheet (Discord, Drive, …). */
+    private fun shareSettingsJson() {
+        try {
+            val json = SettingsBackup.exportJson(this)
+            val dir = File(cacheDir, "settings").apply { mkdirs() }
+            val file = File(dir, SettingsBackup.suggestedFileName(this))
+            file.writeText(json, Charsets.UTF_8)
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val profile = ProfilePrefs.get(this).shortLabel
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_SUBJECT, "OpenCfMoto bike tuning — $profile")
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    "OpenCfMoto bike tuning ($profile) — profile / resolution / margins / buttons " +
+                        "(no passwords, no bike name/SSID).\n" +
+                        "Import via Setup → Wi‑Fi & logs → Import…",
+                )
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newUri(contentResolver, file.name, uri)
+            }
+            startActivity(Intent.createChooser(send, "Share settings JSON"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Share failed: $e", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun importSettingsFromUri(uri: Uri) {
+        try {
+            val text = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+            if (text.isNullOrBlank()) {
+                Toast.makeText(this, "Empty file", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val onto = BikeMemory.lastBikeName(this) ?: "the selected bike"
+            AlertDialog.Builder(this)
+                .setTitle("Import settings?")
+                .setMessage(
+                    "Replace bike tuning for $onto — profile, resolution, fit, power, margins, " +
+                        "handlebar buttons, Control AA, non-touch, Wi‑Fi transport?\n\n" +
+                        "Personal prefs (map theme, saved places, auto-connect, …) are left alone. " +
+                        "Wi‑Fi passwords are never imported."
+                )
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton("Import") { _, _ ->
+                    val result = SettingsBackup.importJson(this, text)
+                    refreshOptions()
+                    Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+                }
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Import failed: $e", Toast.LENGTH_LONG).show()
         }
     }
 
