@@ -26,7 +26,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="Forces Android Auto to render at your panel's aspect ratio by advertising unused margins, then crops to the usable area — so the map fills the whole screen with no crop or distortion. Enter your panel's real size (e.g. 800 × 951 for the 1000 MT-X). Applies on next connect."
+            android:text="Makes Android Auto render at your dash's real aspect ratio (AAP margins + crop) so the map can fill the screen without cropping or stretching. Auto uses the size the bike reports (or the profile). Odd panels (near-square, tall portrait) benefit; normal landscape dashes get zero margins and stay the same."
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
@@ -37,29 +37,39 @@
             android:baselineAligned="false"
             android:orientation="horizontal">
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/match_on"
+                android:id="@+id/match_auto"
                 style="@style/Widget.OpenCfMoto.Segment"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="4dp"
                 android:layout_weight="1"
-                android:text="Match aspect" />
+                android:text="Auto" />
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/match_off"
                 style="@style/Widget.OpenCfMoto.Segment"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginHorizontal="4dp"
                 android:layout_weight="1"
                 android:text="Off" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/match_manual"
+                style="@style/Widget.OpenCfMoto.Segment"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:text="Manual" />
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/match_size_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:baselineAligned="false"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone">
             <EditText
                 android:id="@+id/match_w"
                 android:layout_width="0dp"
