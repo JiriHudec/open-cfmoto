@@ -63,7 +63,13 @@ class AaCompositor(private val log: (String) -> Unit) {
     private var aPosition = 0
     private var aTexCoord = 0
     private var uTexMatrix = 0
+    private var uCrop = 0
     private var textureId = 0
+
+    // Fraction of the coded AA frame that holds content (1.0 = whole frame). <1 when match-panel-aspect
+    // margins are advertised: AA draws its UI into a sub-rect, so we sample only that region.
+    @Volatile private var cropU = 1f
+    @Volatile private var cropV = 1f
     private lateinit var surfaceTexture: SurfaceTexture
 
     /** Where the AA decoder renders. Valid after [start]. */
@@ -119,6 +125,11 @@ class AaCompositor(private val log: (String) -> Unit) {
                 initGl()
                 val spec = BikeProfileHolder.aaVideo
                 bufW = spec.width; bufH = spec.height
+                // Match-aspect margins are known before AA starts, so the in-app Dash view preview is
+                // aspect-correct immediately (even before the bike connects / sets the bike canvas).
+                val m = BikeProfileHolder.aaContentMargins
+                cropU = ((spec.width - m.marginW).toFloat() / spec.width).coerceIn(0.05f, 1f)
+                cropV = ((spec.height - m.marginH).toFloat() / spec.height).coerceIn(0.05f, 1f)
                 surfaceTexture = SurfaceTexture(textureId)
                 surfaceTexture.setDefaultBufferSize(spec.width, spec.height)
                 surfaceTexture.setOnFrameAvailableListener({ handler.post { onFrame() } }, handler)
@@ -208,10 +219,14 @@ class AaCompositor(private val log: (String) -> Unit) {
         try { latch.await(1, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
     }
 
-    /** Aspect-fit the AA source ([bufW]x[bufH]) into the preview surface ([previewW]x[previewH]). */
+    /**
+     * Aspect-fit the AA source into the preview surface ([previewW]x[previewH]). Uses the *usable*
+     * area (coded frame minus match-aspect margins, i.e. scaled by [cropU]/[cropV]) so the in-app
+     * Dash view matches what the compositor actually samples and isn't stretched.
+     */
     private fun computePreviewRect() {
         if (previewW == 0 || previewH == 0 || bufW == 0 || bufH == 0) return
-        val srcAspect = bufW.toFloat() / bufH
+        val srcAspect = (bufW * cropU) / (bufH * cropV)
         val viewAspect = previewW.toFloat() / previewH
         if (srcAspect < viewAspect) {           // source narrower → fit height, bars left/right
             ppH = previewH; ppW = Math.round(previewH * srcAspect)
@@ -277,6 +292,19 @@ class AaCompositor(private val log: (String) -> Unit) {
         }
         vpX = mL + (areaW - vpW) / 2
         vpY = mT + (areaH - vpH) / 2
+    }
+
+    /**
+     * Sample only [cu]x[cv] (fractions, top-left origin) of the coded AA frame — the usable content
+     * area when match-panel-aspect margins are advertised. 1,1 = whole frame (default).
+     */
+    fun setSourceCrop(cu: Float, cv: Float) {
+        handler.post {
+            cropU = cu.coerceIn(0.05f, 1f)
+            cropV = cv.coerceIn(0.05f, 1f)
+            computePreviewRect()
+            if (hasContent) drawFrame()
+        }
     }
 
     /** Re-apply [ScreenMargins] after the rider changes them mid-session. */
@@ -367,6 +395,7 @@ class AaCompositor(private val log: (String) -> Unit) {
         GLES20.glEnableVertexAttribArray(aTexCoord)
 
         GLES20.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
+        GLES20.glUniform2f(uCrop, cropU, cropV)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
@@ -429,12 +458,18 @@ class AaCompositor(private val log: (String) -> Unit) {
     private fun initGl() {
         val vs = """
             uniform mat4 uTexMatrix;
+            uniform vec2 uCrop;
             attribute vec4 aPosition;
             attribute vec4 aTexCoord;
             varying vec2 vTexCoord;
             void main() {
                 gl_Position = aPosition;
-                vTexCoord = (uTexMatrix * aTexCoord).xy;
+                // AA splits margin_width/height evenly (DHU: marginwidth 280 → 140+140), so its UI is
+                // CENTERED inside the coded frame. Sample the centered usable region on both axes; the
+                // (1-crop)*0.5 offset is symmetric, so SurfaceTexture's y-flip needs no special case.
+                float u = (1.0 - uCrop.x) * 0.5 + aTexCoord.x * uCrop.x;
+                float v = (1.0 - uCrop.y) * 0.5 + aTexCoord.y * uCrop.y;
+                vTexCoord = (uTexMatrix * vec4(u, v, aTexCoord.z, aTexCoord.w)).xy;
             }
         """.trimIndent()
         val fs = """
@@ -448,6 +483,7 @@ class AaCompositor(private val log: (String) -> Unit) {
         aPosition = GLES20.glGetAttribLocation(program, "aPosition")
         aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
         uTexMatrix = GLES20.glGetUniformLocation(program, "uTexMatrix")
+        uCrop = GLES20.glGetUniformLocation(program, "uCrop")
         Matrix.setIdentityM(texMatrix, 0)
 
         val ids = IntArray(1)

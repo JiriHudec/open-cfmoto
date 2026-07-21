@@ -43,6 +43,15 @@ object BikeScope {
         p.edit().putBoolean(scopedKey(ctx, base), value).apply()
     }
 
+    fun getInt(p: SharedPreferences, ctx: Context, base: String, def: Int): Int {
+        suffix(ctx)?.let { val k = "$base#$it"; if (p.contains(k)) return p.getInt(k, def) }
+        return p.getInt(base, def)
+    }
+
+    fun putInt(p: SharedPreferences, ctx: Context, base: String, value: Int) {
+        p.edit().putInt(scopedKey(ctx, base), value).apply()
+    }
+
     /** Drop the selected bike's scoped value so the setting reverts to its fallback/default. */
     fun remove(p: SharedPreferences, ctx: Context, base: String) {
         p.edit().remove(scopedKey(ctx, base)).apply()

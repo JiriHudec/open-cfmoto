@@ -29,6 +29,42 @@ data class AaVideoSpec(val resolution: AaResolution, val dpi: Int) {
     val height: Int get() = resolution.h
 }
 
+/**
+ * Unused pixels of the coded AA frame, advertised via the AAP VideoConfiguration
+ * `marginWidth`/`marginHeight` fields. Android Auto then renders its UI into the remaining
+ * `(width - marginW) x (height - marginH)` area — the standard way to make AA draw at a panel's
+ * aspect ratio when none of the fixed coded sizes matches it. The compositor samples only that
+ * usable sub-rect (see [AaCompositor]).
+ */
+data class AaMargins(val marginW: Int, val marginH: Int) {
+    val any: Boolean get() = marginW > 0 || marginH > 0
+
+    companion object {
+        val NONE = AaMargins(0, 0)
+
+        /**
+         * Margins that shrink [coded] so the usable area matches [targetW]:[targetH], trimming only
+         * the axis that is too long (keeping one axis at full coded size to lose the least detail).
+         */
+        fun forAspect(coded: AaVideoSpec, targetW: Int, targetH: Int): AaMargins {
+            if (targetW <= 0 || targetH <= 0) return NONE
+            val cw = coded.width
+            val ch = coded.height
+            val codedAspect = cw.toDouble() / ch
+            val targetAspect = targetW.toDouble() / targetH
+            return if (codedAspect < targetAspect) {
+                // coded is too tall/narrow for the target → trim height.
+                val usableH = Math.round(cw * targetH.toDouble() / targetW).toInt().coerceIn(16, ch)
+                AaMargins(0, (ch - usableH).coerceAtLeast(0))
+            } else {
+                // coded is too wide for the target → trim width.
+                val usableW = Math.round(ch * targetW.toDouble() / targetH).toInt().coerceIn(16, cw)
+                AaMargins((cw - usableW).coerceAtLeast(0), 0)
+            }
+        }
+    }
+}
+
 interface BikeProfile {
     /** Human-readable label — appears in bike-test logs so a capture is self-describing. */
     val name: String
@@ -185,6 +221,13 @@ object BikeProfileHolder {
     @Volatile var aaVideoOverride: AaVideoSpec? = null
 
     /**
+     * Margins advertised to Android Auto so it renders at the dash panel's aspect ratio (see
+     * [AaMargins]). Set before AA starts in [MainActivity]; read by [dev.zanderp.opencfmoto.aa.ServiceDiscoveryResponse]
+     * (advertise) and the compositor (crop the source to the usable area). [AaMargins.NONE] = off.
+     */
+    @Volatile var aaContentMargins: AaMargins = AaMargins.NONE
+
+    /**
      * Setup ▸ "Disable touchscreen" — when true, never advertise a touchscreen to Android Auto
      * (focus/knob UI) even if the active profile claims touch. Synced from [AppSettings.forceNonTouch].
      */
@@ -198,6 +241,11 @@ object BikeProfileHolder {
 
     /** The effective Android Auto video spec: the user override if set, else the active profile's. */
     val aaVideo: AaVideoSpec get() = aaVideoOverride ?: active.aaVideo
+
+    /** Usable AA content size (coded frame minus [aaContentMargins]) — the aspect-correct area the
+     *  compositor and the in-app Dash view actually show. Equals the coded size when margins are off. */
+    val aaUsableWidth: Int get() = (aaVideo.width - aaContentMargins.marginW).coerceIn(1, aaVideo.width)
+    val aaUsableHeight: Int get() = (aaVideo.height - aaContentMargins.marginH).coerceIn(1, aaVideo.height)
 
     /** Whether AA / CLIENT_INFO should advertise a touchscreen (profile ∧ ¬forceNonTouch). */
     val advertisesScreenTouch: Boolean get() = !forceNonTouch && active.supportsScreenTouch
