@@ -10,10 +10,10 @@ every ride — all from an Android phone in your pocket.
 <br/>
 
 [![Join the Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/xRt5yZy2U)
+[![Downloads](https://img.shields.io/github/downloads/zanderp/open-cfmoto/total?style=for-the-badge&label=Downloads)](https://github.com/zanderp/open-cfmoto/releases)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20project-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/alexandrupopa)
 
 **💬 Questions, logs, or a new bike to add? [Join the Open CFMoto Discord](https://discord.gg/xRt5yZy2U).**
-
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20project-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/alexandrupopa)
 
 <br/>
 
