@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.view.View
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -17,13 +18,13 @@ import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 
 /**
- * Match-panel-aspect page: make Android Auto render at the dash panel's aspect ratio by advertising
- * unused margins (AAP marginWidth/marginHeight), which the compositor then crops to. Applies on the
- * next connect. See [VideoPrefs] (KEY_MATCH_ASPECT/ASPECT_*) and [AaMargins].
+ * Match-panel-aspect page: Android Auto reflows to the dash panel's aspect via AAP margins, then the
+ * compositor crops to the usable area. Default is Auto (learned panel size / profile); Manual lets
+ * the rider type a size; Off restores letterbox/crop. Applies on the next connect.
  */
 class CustomResolutionActivity : AppCompatActivity() {
 
-    private var matchOn = false
+    private var mode = MatchAspectMode.AUTO
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,13 +35,23 @@ class CustomResolutionActivity : AppCompatActivity() {
             insets
         }
 
+        mode = VideoPrefs.matchAspectMode(this)
         val (mw, mh) = VideoPrefs.aspectTarget(this)
         findViewById<EditText>(R.id.match_w).setText(mw.toString())
         findViewById<EditText>(R.id.match_h).setText(mh.toString())
-        matchOn = VideoPrefs.matchAspect(this)
 
-        findViewById<MaterialButton>(R.id.match_on).setOnClickListener { matchOn = true; refresh() }
-        findViewById<MaterialButton>(R.id.match_off).setOnClickListener { matchOn = false; refresh() }
+        findViewById<MaterialButton>(R.id.match_auto).setOnClickListener {
+            mode = MatchAspectMode.AUTO
+            refresh()
+        }
+        findViewById<MaterialButton>(R.id.match_off).setOnClickListener {
+            mode = MatchAspectMode.OFF
+            refresh()
+        }
+        findViewById<MaterialButton>(R.id.match_manual).setOnClickListener {
+            mode = MatchAspectMode.MANUAL
+            refresh()
+        }
         findViewById<MaterialButton>(R.id.btn_custom_res_save).setOnClickListener { save() }
         findViewById<MaterialButton>(R.id.btn_custom_res_done).setOnClickListener { save(); finish() }
 
@@ -55,27 +66,64 @@ class CustomResolutionActivity : AppCompatActivity() {
 
     private fun save() {
         val (mw0, mh0) = VideoPrefs.aspectTarget(this)
-        VideoPrefs.setMatchAspect(this, matchOn, readInt(R.id.match_w, mw0), readInt(R.id.match_h, mh0))
+        VideoPrefs.setMatchAspect(
+            this,
+            mode,
+            readInt(R.id.match_w, mw0),
+            readInt(R.id.match_h, mh0),
+        )
         Toast.makeText(this, "Saved (applies next connect)", Toast.LENGTH_SHORT).show()
     }
 
     private fun refresh() {
-        highlight(matchOn, R.id.match_on to true, R.id.match_off to false)
+        highlight(
+            mode,
+            R.id.match_auto to MatchAspectMode.AUTO,
+            R.id.match_off to MatchAspectMode.OFF,
+            R.id.match_manual to MatchAspectMode.MANUAL,
+        )
+        val manualRow = findViewById<View>(R.id.match_size_row)
+        manualRow.visibility = if (mode == MatchAspectMode.MANUAL) View.VISIBLE else View.GONE
         refreshMatchNote()
     }
 
-    /** Show the margins + usable content size that match-aspect will produce for the current AA size. */
+    /** Show detected panel + the margins/usable size for the current AA coded resolution. */
     private fun refreshMatchNote() {
-        val (mw0, mh0) = VideoPrefs.aspectTarget(this)
-        val tw = readInt(R.id.match_w, mw0)
-        val th = readInt(R.id.match_h, mh0)
+        val detected = VideoPrefs.detectedPanelSize(this)
+        val detectedNote = if (detected != null) {
+            "Detected panel ${detected.first}×${detected.second} (from bike / profile)."
+        } else {
+            "No panel size yet — connect once so the bike reports its screen; Auto will use it next time."
+        }
+
         val coded = VideoPrefs.resolution(this).spec ?: BikeProfileHolder.aaVideo
-        val m = AaMargins.forAspect(coded, tw, th)
-        val uw = coded.width - m.marginW
-        val uh = coded.height - m.marginH
-        findViewById<TextView>(R.id.match_note).text =
-            "AA coded ${coded.width}×${coded.height} → margins ${m.marginW}×${m.marginH}, " +
-            "content ${uw}×${uh} (aspect ${"%.3f".format(uw.toDouble() / uh)}). Fills the panel; Screen fit no longer matters."
+        val panel = when (mode) {
+            MatchAspectMode.OFF -> null
+            MatchAspectMode.AUTO -> detected
+            MatchAspectMode.MANUAL -> {
+                val (mw0, mh0) = VideoPrefs.aspectTarget(this)
+                readInt(R.id.match_w, mw0) to readInt(R.id.match_h, mh0)
+            }
+        }
+        val marginNote = if (panel == null) {
+            if (mode == MatchAspectMode.OFF) {
+                "Match aspect off — Screen fit letterbox/crop applies as before."
+            } else {
+                "No margins until a panel size is known."
+            }
+        } else {
+            val m = AaMargins.forAspect(coded, panel.first, panel.second)
+            val uw = coded.width - m.marginW
+            val uh = coded.height - m.marginH
+            if (!m.any) {
+                "AA ${coded.width}×${coded.height} already matches this panel — margins 0 (no change)."
+            } else {
+                "AA coded ${coded.width}×${coded.height} → margins ${m.marginW}×${m.marginH}, " +
+                    "content ${uw}×${uh} (aspect ${"%.3f".format(uw.toDouble() / uh)}). " +
+                    "Fills the panel; Screen fit no longer matters while margins apply."
+            }
+        }
+        findViewById<TextView>(R.id.match_note).text = "$detectedNote\n$marginNote"
     }
 
     private fun <T> highlight(selected: T, vararg pairs: Pair<Int, T>) {

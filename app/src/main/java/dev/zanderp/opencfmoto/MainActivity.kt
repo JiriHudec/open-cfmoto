@@ -100,8 +100,14 @@ class MainActivity : AppCompatActivity() {
         BikeProfileHolder.aaVideoOverride = userOverride ?: autoGeo
         val spec = BikeProfileHolder.aaVideo
         BikeProfileHolder.aaContentMargins = VideoPrefs.aaMarginsFor(this, spec)
-        val aspectNote = BikeProfileHolder.aaContentMargins.let {
-            if (it.any) " [match-aspect: margins ${it.marginW}x${it.marginH}]" else ""
+        val aspectMode = VideoPrefs.matchAspectMode(this)
+        val aspectNote = BikeProfileHolder.aaContentMargins.let { m ->
+            when {
+                m.any -> " [match-aspect ${aspectMode.name}: margins ${m.marginW}x${m.marginH}]"
+                aspectMode == MatchAspectMode.OFF -> " [match-aspect OFF]"
+                VideoPrefs.detectedPanelSize(this) == null -> " [match-aspect: waiting for panel size]"
+                else -> " [match-aspect ${aspectMode.name}: margins 0]"
+            }
         }
         val note = when {
             userOverride != null -> " (override: ${VideoPrefs.resolution(this).label})"

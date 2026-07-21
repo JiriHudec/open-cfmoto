@@ -35,7 +35,10 @@ object DashMemory {
         val prior = prefs(ctx).getString(key, null)
         prefs(ctx).edit().putString(key, now).apply()
         if (prior != now) {
-            LogBus.log("[panel] learned: this bike's screen is $now — next connect will fit AA to it")
+            LogBus.log(
+                "[panel] learned: this bike's screen is $now — next connect will fit AA " +
+                    "resolution + match-aspect margins to it",
+            )
         }
     }
 

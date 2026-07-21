@@ -56,9 +56,10 @@ enum class PowerMode(val fps: Int, val label: String) {
  * CFMoto dashes (matched from the QR/CLIENT_INFO). But an unrecognized dash falls back to the legacy
  * landscape 800×480, which is wrong for a tall/portrait screen. The explicit options let the rider
  * force the shape + size for any bike (e.g. a portrait display we don't yet have a profile for). AA
- * only supports these fixed sizes, so we can't match a panel's exact aspect — the compositor
- * letterboxes/crops per [ScreenFit]. HD sizes are crisper but heavier and can black-screen on some
- * embedded decoders — drop back to a smaller size or AUTO if a bike rejects them.
+ * only supports these fixed sizes; [MatchAspectMode] + AAP margins reflow AA into odd panel
+ * aspects, otherwise the compositor letterboxes/crops per [ScreenFit]. HD sizes are crisper but
+ * heavier and can black-screen on some embedded decoders — drop back to a smaller size or AUTO if
+ * a bike rejects them.
  */
 enum class ResolutionMode(val label: String, val spec: AaVideoSpec?) {
     AUTO("Auto — match your bike (recommended)", null),
@@ -66,6 +67,21 @@ enum class ResolutionMode(val label: String, val spec: AaVideoSpec?) {
     LANDSCAPE_HD("Landscape · 1280×720 (HD)", AaVideoSpec(AaResolution.LANDSCAPE_1280x720, dpi = 160)),
     PORTRAIT_SD("Portrait · 720×1280", AaVideoSpec(AaResolution.PORTRAIT_720x1280, dpi = 240)),
     PORTRAIT_HD("Portrait · 1080×1920 (HD)", AaVideoSpec(AaResolution.PORTRAIT_1080x1920, dpi = 240)),
+}
+
+/**
+ * How [AaMargins] are chosen so Android Auto can reflow to the dash panel's real aspect ratio.
+ *
+ * - [AUTO] (default) — use the panel size learned from the bike (`REQ_CONFIG_CAPTURE` / [DashMemory])
+ *   or the active profile's [BikeProfile.panelSize]. Margins are 0 when the AA coded size already
+ *   matches, so normal landscape dashes stay unchanged.
+ * - [OFF] — never advertise margins (old letterbox/crop behaviour).
+ * - [MANUAL] — use the rider-entered panel W×H.
+ */
+enum class MatchAspectMode(val label: String) {
+    AUTO("Auto — from bike screen"),
+    OFF("Off"),
+    MANUAL("Manual size"),
 }
 
 /**
@@ -81,9 +97,9 @@ object VideoPrefs {
     private const val KEY_POWER = "power_mode"
     private const val KEY_RESOLUTION = "resolution_mode"
 
-    // Match panel aspect (AA margins): make Android Auto render at a target aspect ratio via the
-    // AAP marginWidth/marginHeight fields; the compositor then samples only the usable sub-rect.
-    // Default target is the 1000 MT-X panel (800x951).
+    // Match panel aspect (AA margins): Auto uses DashMemory / profile panel size for every bike.
+    private const val KEY_MATCH_MODE = "match_aspect_mode"
+    /** Legacy boolean from PR #5 — migrated once into [KEY_MATCH_MODE]. */
     private const val KEY_MATCH_ASPECT = "match_aspect_on"
     private const val KEY_ASPECT_W = "match_aspect_w"
     private const val KEY_ASPECT_H = "match_aspect_h"
@@ -132,26 +148,54 @@ object VideoPrefs {
         BikeScope.putString(prefs(ctx), ctx, KEY_RESOLUTION, mode.name)
     }
 
-    fun matchAspect(ctx: Context): Boolean =
-        BikeScope.getBoolean(prefs(ctx), ctx, KEY_MATCH_ASPECT, false)
+    fun matchAspectMode(ctx: Context): MatchAspectMode {
+        val p = prefs(ctx)
+        val named = BikeScope.getString(p, ctx, KEY_MATCH_MODE, null)
+        if (named != null) {
+            return runCatching { MatchAspectMode.valueOf(named) }.getOrDefault(MatchAspectMode.AUTO)
+        }
+        // Migrate PR #5 boolean: explicit On → Manual (kept their typed size); else Auto.
+        return if (BikeScope.getBoolean(p, ctx, KEY_MATCH_ASPECT, false)) {
+            MatchAspectMode.MANUAL
+        } else {
+            MatchAspectMode.AUTO
+        }
+    }
 
-    /** Target aspect for [matchAspect], as (width, height). Default = 1000 MT-X panel 800×951. */
-    fun aspectTarget(ctx: Context): Pair<Int, Int> = Pair(
-        BikeScope.getInt(prefs(ctx), ctx, KEY_ASPECT_W, 800),
-        BikeScope.getInt(prefs(ctx), ctx, KEY_ASPECT_H, 951),
-    )
+    /** Manual target W×H when mode is [MatchAspectMode.MANUAL]. */
+    fun aspectTarget(ctx: Context): Pair<Int, Int> {
+        val detected = detectedPanelSize(ctx)
+        return Pair(
+            BikeScope.getInt(prefs(ctx), ctx, KEY_ASPECT_W, detected?.first ?: 800),
+            BikeScope.getInt(prefs(ctx), ctx, KEY_ASPECT_H, detected?.second ?: 480),
+        )
+    }
 
-    fun setMatchAspect(ctx: Context, on: Boolean, w: Int, h: Int) {
-        BikeScope.putBoolean(prefs(ctx), ctx, KEY_MATCH_ASPECT, on)
+    /**
+     * Panel size for Auto match-aspect: last measured canvas for this bike's SSID, else the
+     * profile's known [BikeProfile.panelSize]. Null when we have not seen the dash yet.
+     */
+    fun detectedPanelSize(ctx: Context): Pair<Int, Int>? {
+        val qr = BikeMemory.lastQr(ctx)
+        DashMemory.get(ctx, qr?.ssid)?.let { return it }
+        BikeProfileHolder.active.panelSize?.let { return it }
+        return BikeProfiles.selectByQr(qr, ctx).panelSize
+    }
+
+    fun setMatchAspect(ctx: Context, mode: MatchAspectMode, w: Int, h: Int) {
+        BikeScope.putString(prefs(ctx), ctx, KEY_MATCH_MODE, mode.name)
         BikeScope.putInt(prefs(ctx), ctx, KEY_ASPECT_W, w.coerceIn(16, 8192))
         BikeScope.putInt(prefs(ctx), ctx, KEY_ASPECT_H, h.coerceIn(16, 8192))
     }
 
-    /** Margins to advertise for the current AA [spec] under the match-aspect setting, or NONE. */
+    /** Margins to advertise for the current AA [spec], or [AaMargins.NONE]. */
     fun aaMarginsFor(ctx: Context, spec: AaVideoSpec): AaMargins {
-        if (!matchAspect(ctx)) return AaMargins.NONE
-        val (tw, th) = aspectTarget(ctx)
-        return AaMargins.forAspect(spec, tw, th)
+        val panel = when (matchAspectMode(ctx)) {
+            MatchAspectMode.OFF -> return AaMargins.NONE
+            MatchAspectMode.MANUAL -> aspectTarget(ctx)
+            MatchAspectMode.AUTO -> detectedPanelSize(ctx) ?: return AaMargins.NONE
+        }
+        return AaMargins.forAspect(spec, panel.first, panel.second)
     }
 
     /**
